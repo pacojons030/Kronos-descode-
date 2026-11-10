@@ -1,0 +1,3629 @@
+import { ScrollView } from "std-widgets.slint";
+
+// =========================================================================
+// KRONOS DESCODE — DATA MODELS & CONTRACTS
+// =========================================================================
+
+export struct SyntaxLine {
+    line_num: string,
+    line_index: int,
+    raw_text: string,
+    is_comment: bool,
+    diff_state: int,
+    t1: string, c1: color,
+    t2: string, c2: color,
+    t3: string, c3: color,
+    t4: string, c4: color,
+    t5: string, c5: color,
+    t6: string, c6: color,
+    t7: string, c7: color,
+    t8: string, c8: color,
+    t9: string, c9: color,
+    t10: string, c10: color,
+    t11: string, c11: color,
+    t12: string, c12: color,
+}
+
+export struct ChatMessage {
+    sender: string,
+    role: int, // 0 = KRONOS AI, 1 = Usuario, 2 = Sistema
+    text: string,
+    has_code: bool,
+    code_snippet: string,
+    code_lang: string,
+    timestamp: string,
+}
+
+export struct EditorTabItem {
+    id: int,
+    title: string,
+    tab_type: int,
+    dot_color: color,
+}
+
+export struct WorkspaceFileItem {
+    name: string,
+    rel_path: string,
+    full_path: string,
+    is_dir: bool,
+    is_python: bool,
+    depth: int,
+    is_active: bool,
+    is_expanded: bool,
+    has_children: bool,
+    icon_type: int, // 0 = folder, 1 = java, 2 = python, 3 = archive, 4 = config, 5 = text, 6 = binary/class, 7 = generic
+    size_str: string,
+}
+
+export struct AnalysisPhaseItem {
+    phase_id: int,
+    name: string,
+    status_str: string,
+    status_code: int, // 0 = pending, 1 = running, 2 = completed, 3 = skipped, 4 = warning, 5 = error
+    elapsed_ms: int,
+    detail: string,
+}
+
+export struct AstVisualNode {
+    id: int,
+    node_type: string,
+    name: string,
+    detail: string,
+    line_number: int,
+    depth: int,
+    is_alert: bool,
+}
+
+export struct HistoryUiItem {
+    id: int,
+    timestamp: string,
+    filename: string,
+    ops_summary: string,
+    status_badge: string,
+    is_safe: bool,
+}
+
+export struct PaletteCommandItem {
+    id: int,
+    label: string,
+    shortcut: string,
+}
+
+// =========================================================================
+// KRONOS DESCODE — SOVEREIGN OBSIDIAN & CRIMSON COMPONENTS
+// Paleta oficial:
+// Background:        #0B0B0D
+// Sidebar:           #101013
+// Secondary Surface: #151518
+// Editor Background: #0D0D10
+// Borders:           #26262B (1px flat)
+// Primary Text:      #E8E8EB
+// Secondary Text:    #85858F
+// Primary Accent:    #D9283D
+// Accent Hover:      #F13B50
+// Selection:         #D9283D24 (rgba(217, 40, 61, 0.14))
+// =========================================================================
+
+
+component KronosIconButton inherits Rectangle {
+    in property <string> svg_commands;
+    in property <bool> active: false;
+    in property <color> icon_color: #85858F;
+    in property <color> active_color: #E8E8EB;
+    callback clicked <=> touch.clicked;
+
+    width: 24px;
+    height: 24px;
+    background: transparent;
+
+    Rectangle {
+        width: 22px;
+        height: 22px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        border-radius: 2px;
+        background: root.active ? #D9283D24 : (touch.has-hover ? #151518 : transparent);
+        border-width: root.active ? 1px : 0px;
+        border-color: root.active ? #D9283D : transparent;
+
+        Path {
+            width: 12px;
+            height: 12px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            commands: root.svg_commands;
+            stroke: root.active ? #D9283D : (touch.has-hover ? root.active_color : root.icon_color);
+            stroke-width: 1.2px;
+            fill: transparent;
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+    }
+}
+
+component KronosActionPill inherits Rectangle {
+    in property <string> label;
+    in property <string> svg_commands: "";
+    in property <bool> primary: false;
+    in property <bool> active: false;
+    callback clicked <=> touch.clicked;
+
+    height: 24px;
+    width: content_layout.preferred-width + 16px;
+    border-radius: 2px;
+    background: root.primary ? (touch.has-hover ? #F13B50 : #D9283D) :
+                (root.active ? #D9283D24 : (touch.has-hover ? #151518 : #101013));
+    border-width: 1px;
+    border-color: root.primary ? (touch.has-hover ? #F13B50 : #D9283D) :
+                  (root.active ? #D9283D : #26262B);
+
+    content_layout := HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 5px;
+        alignment: center;
+
+        if root.svg_commands != "" : Path {
+            width: 10px;
+            height: 10px;
+            y: (parent.height - self.height) / 2;
+            commands: root.svg_commands;
+            stroke: root.primary ? #E8E8EB : (root.active ? #D9283D : #85858F);
+            stroke-width: 1.2px;
+            fill: transparent;
+        }
+
+        Text {
+            text: root.label;
+            color: root.primary ? #E8E8EB : (root.active || touch.has-hover ? #E8E8EB : #85858F);
+            font-family: "Segoe UI";
+            font-size: 10.5px;
+            font-weight: root.primary || root.active ? 600 : 400;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+    }
+}
+
+// Icono minimalista de la barra vertical izquierda con indicador carmesí (#D9283D)
+component ActivityBarIcon inherits Rectangle {
+    in property <string> svg_commands;
+    in property <string> label_hint: "";
+    in property <bool> active: false;
+    in property <bool> has_badge: false;
+    callback clicked <=> touch.clicked;
+
+    width: 44px;
+    height: 40px;
+    background: root.active ? #151518 : (touch.has-hover ? #151518 : transparent);
+
+    if root.active : Rectangle {
+        x: 0px;
+        y: 6px;
+        width: 2px;
+        height: parent.height - 12px;
+        background: #D9283D;
+    }
+
+    Path {
+        width: 16px;
+        height: 16px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        commands: root.svg_commands;
+        stroke: root.active ? #D9283D : (touch.has-hover ? #E8E8EB : #85858F);
+        stroke-width: 1.25px;
+        fill: transparent;
+    }
+
+    if root.has_badge : Rectangle {
+        x: 26px;
+        y: 9px;
+        width: 6px;
+        height: 6px;
+        border-radius: 3px;
+        background: #D9283D;
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+    }
+}
+
+component KronosExplorerRow inherits Rectangle {
+    in property <string> filename;
+    in property <bool> is_directory: false;
+    in property <bool> is_python: false;
+    in property <int> depth: 0;
+    in property <bool> selected: false;
+    in property <bool> is_expanded: false;
+    in property <bool> has_children: true;
+    in property <int> icon_type: 0;
+    in property <string> size_str: "";
+    callback clicked <=> touch.clicked;
+
+    height: 24px;
+    background: selected ? #D9283D24 : (touch.has-hover ? #151518 : transparent);
+
+    if selected : Rectangle {
+        x: 0px;
+        width: 2px;
+        height: 100%;
+        background: #D9283D;
+    }
+
+    HorizontalLayout {
+        padding-left: 8px + (root.depth * 14px);
+        padding-right: 8px;
+        spacing: 5px;
+
+        // Chevron para carpetas
+        if root.is_directory : Rectangle {
+            width: 10px;
+            height: 12px;
+            y: (parent.height - self.height) / 2;
+
+            if root.has_children : Path {
+                width: 7px;
+                height: 7px;
+                x: 1.5px;
+                y: 2.5px;
+                commands: root.is_expanded ? "M 1 2 L 3.5 4.5 L 6 2" : "M 2 1 L 4.5 3.5 L 2 6";
+                stroke: touch.has-hover ? #E8E8EB : #85858F;
+                stroke-width: 1.2px;
+                fill: transparent;
+            }
+        }
+
+        if !root.is_directory : Rectangle {
+            width: 10px;
+            height: 12px;
+        }
+
+        // Icono diferenciado según tipo
+        Rectangle {
+            width: 14px;
+            height: 14px;
+            y: (parent.height - self.height) / 2;
+
+            // 0: Carpeta
+            if root.is_directory : Path {
+                width: 12px;
+                height: 12px;
+                x: 1px;
+                y: 1px;
+                commands: root.is_expanded ?
+                    "M 1 3 L 4.5 3 L 6 4.5 L 11 4.5 L 11 10.5 L 1 10.5 Z" :
+                    "M 1 2.5 L 4.5 2.5 L 6 4 L 11 4 L 11 10 L 1 10 Z";
+                stroke: root.is_expanded ? #E8E8EB : #85858F;
+                stroke-width: 1.1px;
+                fill: transparent;
+            }
+
+            // 1: Java
+            if !root.is_directory && root.icon_type == 1 : Path {
+                width: 12px;
+                height: 12px;
+                x: 1px;
+                y: 1px;
+                commands: "M 2 1 L 8 1 L 11 4 L 11 11 L 2 11 Z M 8 1 L 8 4 L 11 4 M 4.5 7 L 7.5 7 M 4.5 9 L 6.5 9";
+                stroke: #FF8C42;
+                stroke-width: 1.1px;
+                fill: transparent;
+            }
+
+            // 2: Python
+            if !root.is_directory && root.icon_type == 2 : Path {
+                width: 12px;
+                height: 12px;
+                x: 1px;
+                y: 1px;
+                commands: "M 2 1 L 8 1 L 11 4 L 11 11 L 2 11 Z M 8 1 L 8 4 L 11 4 M 5 6 L 7 6 L 7 8 M 5 8 L 7 8";
+                stroke: #4B8BBE;
+                stroke-width: 1.1px;
+                fill: transparent;
+            }
+
+            // 3: Archivo Comprimido (JAR / ZIP)
+            if !root.is_directory && root.icon_type == 3 : Path {
+                width: 12px;
+                height: 12px;
+                x: 1px;
+                y: 1px;
+                commands: "M 2 2 L 10 2 L 10 10 L 2 10 Z M 2 4.5 L 10 4.5 M 6 2 L 6 10";
+                stroke: #E5C07B;
+                stroke-width: 1.1px;
+                fill: transparent;
+            }
+
+            // 4: Configuración (YAML / JSON / TOML / XML)
+            if !root.is_directory && root.icon_type == 4 : Path {
+                width: 12px;
+                height: 12px;
+                x: 1px;
+                y: 1px;
+                commands: "M 2 1 L 8 1 L 11 4 L 11 11 L 2 11 Z M 4 6 L 5.5 7.5 L 4 9 M 8 6 L 6.5 7.5 L 8 9";
+                stroke: #98C379;
+                stroke-width: 1.1px;
+                fill: transparent;
+            }
+
+            // 5: Documento / Texto (MD / TXT)
+            if !root.is_directory && root.icon_type == 5 : Path {
+                width: 12px;
+                height: 12px;
+                x: 1px;
+                y: 1px;
+                commands: "M 2 1 L 8 1 L 11 4 L 11 11 L 2 11 Z M 8 1 L 8 4 L 11 4 M 4 6 L 8 6 M 4 8 L 8 8";
+                stroke: #61AFEF;
+                stroke-width: 1.1px;
+                fill: transparent;
+            }
+
+            // 6: Binario / Bytecode (Class / Bin)
+            if !root.is_directory && root.icon_type == 6 : Path {
+                width: 12px;
+                height: 12px;
+                x: 1px;
+                y: 1px;
+                commands: "M 3 2 L 9 2 L 10.5 5 L 6 10 L 1.5 5 Z";
+                stroke: #C678DD;
+                stroke-width: 1.1px;
+                fill: transparent;
+            }
+
+            // 7: Archivo Genérico
+            if !root.is_directory && (root.icon_type == 0 || root.icon_type >= 7) : Path {
+                width: 12px;
+                height: 12px;
+                x: 1px;
+                y: 1px;
+                commands: "M 2 1 L 8 1 L 11 4 L 11 11 L 2 11 Z M 8 1 L 8 4 L 11 4";
+                stroke: #85858F;
+                stroke-width: 1.1px;
+                fill: transparent;
+            }
+        }
+
+        Text {
+            text: root.filename;
+            color: selected ? #E8E8EB : (root.is_directory ? #E8E8EB : #C5C5CE);
+            font-family: "Segoe UI";
+            font-size: 11.5px;
+            font-weight: selected || root.is_directory ? 600 : 400;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        Rectangle { horizontal-stretch: 1; }
+
+        if root.size_str != "" : Text {
+            text: root.size_str;
+            color: #606068;
+            font-family: "Consolas";
+            font-size: 9.5px;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+    }
+}
+
+component PipelineToggleRow inherits Rectangle {
+    in property <string> label;
+    in property <string> description;
+    in property <bool> checked: true;
+    callback toggled <=> touch.clicked;
+
+    height: root.description != "" ? 36px : 26px;
+    background: touch.has-hover ? #151518 : transparent;
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 8px;
+
+        Rectangle {
+            width: 14px;
+            height: 14px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 2px;
+            background: root.checked ? #D9283D : #0D0D10;
+            border-width: 1px;
+            border-color: root.checked ? #D9283D : #26262B;
+
+            if root.checked : Path {
+                width: 8px;
+                height: 8px;
+                x: 3px;
+                y: 3px;
+                commands: "M 1 4 L 3 6.5 L 7 1.5";
+                stroke: #E8E8EB;
+                stroke-width: 1.4px;
+                fill: transparent;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            spacing: 1px;
+
+            Text {
+                text: root.label;
+                color: #E8E8EB;
+                font-family: "Segoe UI";
+                font-size: 11px;
+                font-weight: 500;
+            }
+
+            if root.description != "" : Text {
+                text: root.description;
+                color: #85858F;
+                font-family: "Segoe UI";
+                font-size: 9.5px;
+                overflow: elide;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+    }
+}
+
+component FileMenuRow inherits Rectangle {
+    in property <string> label;
+    in property <string> shortcut: "";
+    callback clicked <=> touch.clicked;
+
+    height: 26px;
+    background: touch.has-hover ? #D9283D24 : transparent;
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 12px;
+
+        Text {
+            text: root.label;
+            color: touch.has-hover ? #E8E8EB : #85858F;
+            font-family: "Segoe UI";
+            font-size: 11px;
+            vertical-alignment: center;
+        }
+
+        Rectangle { horizontal-stretch: 1; }
+
+        if root.shortcut != "" : Text {
+            text: root.shortcut;
+            color: #85858F;
+            font-family: "Consolas";
+            font-size: 10px;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+    }
+}
+
+component ModelOptionItem inherits Rectangle {
+    in property <string> model_name;
+    in property <string> description;
+    in property <bool> is_selected: false;
+    callback selected <=> touch.clicked;
+
+    height: 28px;
+    background: touch.has-hover ? #151518 : (root.is_selected ? #D9283D24 : transparent);
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 8px;
+
+        if root.is_selected : Path {
+            width: 9px;
+            height: 9px;
+            y: (parent.height - self.height) / 2;
+            commands: "M 1 4.5 L 3.5 7 L 8 1.5";
+            stroke: #D9283D;
+            stroke-width: 1.4px;
+            fill: transparent;
+        }
+
+        if !root.is_selected : Rectangle { width: 9px; }
+
+        Text {
+            text: root.model_name;
+            color: root.is_selected ? #E8E8EB : #85858F;
+            font-family: "Consolas";
+            font-size: 10.5px;
+            font-weight: root.is_selected ? 600 : 400;
+            vertical-alignment: center;
+        }
+
+        Rectangle { horizontal-stretch: 1; }
+
+        Text {
+            text: root.description;
+            color: #85858F;
+            font-family: "Segoe UI";
+            font-size: 9.5px;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+    }
+}
+
+// Pestaña propia de KRONOS DESCODE con indicador superior carmesí (#D9283D)
+component KronosEditorTab inherits Rectangle {
+    in property <string> title;
+    in property <bool> active: false;
+    in property <color> dot_color: #D9283D;
+    callback selected <=> select_touch.clicked;
+    callback close_clicked <=> close_touch.clicked;
+
+    width: 180px;
+    height: 34px;
+    background: root.active ? #0D0D10 : (select_touch.has-hover ? #151518 : #101013);
+
+    VerticalLayout {
+        Rectangle {
+            height: 2px;
+            background: root.active ? #D9283D : transparent;
+        }
+
+        HorizontalLayout {
+            vertical-stretch: 1;
+            padding-left: 12px;
+            padding-right: 28px;
+            spacing: 7px;
+
+            Rectangle {
+                width: 6px;
+                height: 6px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 3px;
+                background: root.active ? #D9283D : #85858F;
+            }
+
+            Text {
+                horizontal-stretch: 1;
+                text: root.title;
+                color: root.active ? #E8E8EB : #85858F;
+                font-family: "Segoe UI";
+                font-size: 11px;
+                font-weight: root.active ? 600 : 400;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+    }
+
+    select_touch := TouchArea {
+        x: 0px;
+        y: 0px;
+        width: parent.width - 26px;
+        height: parent.height;
+        mouse-cursor: pointer;
+    }
+
+    close_btn := Rectangle {
+        x: parent.width - 24px;
+        y: (parent.height - 20px) / 2;
+        width: 20px;
+        height: 20px;
+        border-radius: 2px;
+        background: close_touch.has-hover ? #D9283D24 : transparent;
+
+        Path {
+            width: 8px;
+            height: 8px;
+            x: 6px;
+            y: 6px;
+            commands: "M 1 1 L 7 7 M 7 1 L 1 7";
+            stroke: close_touch.has-hover ? #F13B50 : (root.active ? #E8E8EB : #85858F);
+            stroke-width: 1.2px;
+        }
+
+        close_touch := TouchArea {
+            width: 100%;
+            height: 100%;
+            mouse-cursor: pointer;
+        }
+    }
+}
+
+// Editor Multilínea Nativo (#0D0D10)
+component KronosRawTextEditor inherits Rectangle {
+    in-out property <string> code_text;
+    in property <string> line_numbers_text: "1";
+    callback code_edited(string);
+
+    background: #0D0D10;
+
+    ScrollView {
+        width: 100%;
+        height: 100%;
+
+        HorizontalLayout {
+            alignment: stretch;
+            padding-top: 8px;
+            padding-bottom: 24px;
+            spacing: 0px;
+
+            Rectangle {
+                width: 48px;
+                background: #0D0D10;
+
+                Text {
+                    x: 0px;
+                    y: 0px;
+                    width: 36px;
+                    text: root.line_numbers_text;
+                    color: #85858F;
+                    font-family: "Consolas";
+                    font-size: 12.5px;
+                    horizontal-alignment: right;
+                }
+            }
+
+            Rectangle {
+                width: 1px;
+                background: #26262B;
+            }
+
+            Rectangle {
+                width: 12px;
+                background: transparent;
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+                min-height: max(520px, editor_input.preferred-height + 32px);
+                background: #0D0D10;
+
+                editor_input := TextInput {
+                    width: 100%;
+                    height: 100%;
+                    text <=> root.code_text;
+                    font-family: "Consolas";
+                    font-size: 12.5px;
+                    color: #E8E8EB;
+                    selection-background-color: #D9283D;
+                    selection-foreground-color: #E8E8EB;
+                    single-line: false;
+                    wrap: no-wrap;
+                    init => {
+                        self.focus();
+                    }
+                    edited => {
+                        root.code_edited(self.text);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Superficie de Código Interactiva con Resaltado Sintáctico y Edición Línea por Línea
+component KronosCodeSurface inherits Rectangle {
+    in property <[SyntaxLine]> lines;
+    in-out property <int> editing_line_idx: -1;
+    in property <bool> comments_hidden: false;
+    callback line_selected(int);
+    callback line_edited(int, string);
+    callback line_newline(int, string);
+    callback toggle_hide_comments();
+    callback request_full_edit();
+
+    background: #0D0D10;
+
+    ScrollView {
+        width: 100%;
+        height: 100%;
+
+        VerticalLayout {
+            alignment: start;
+            padding-top: 8px;
+            padding-bottom: 24px;
+            spacing: 0px;
+
+            for line[idx] in root.lines : Rectangle {
+                height: 20px;
+                background: root.editing_line_idx == line.line_index ? #D9283D24 :
+                            (line.diff_state == 1 ? #151518 : #0D0D10);
+
+                if root.editing_line_idx == line.line_index : Rectangle {
+                    x: 0px;
+                    width: 2px;
+                    height: 100%;
+                    background: #D9283D;
+                }
+
+                HorizontalLayout {
+                    spacing: 0px;
+
+                    Rectangle {
+                        width: 48px;
+                        background: transparent;
+
+                        Text {
+                            x: 0px;
+                            width: 36px;
+                            height: 100%;
+                            text: line.line_num;
+                            color: root.editing_line_idx == line.line_index ? #D9283D : #85858F;
+                            font-family: "Consolas";
+                            font-size: 12px;
+                            horizontal-alignment: right;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    Rectangle { width: 1px; background: #26262B; }
+                    Rectangle { width: 12px; background: transparent; }
+
+                    if root.editing_line_idx == line.line_index : Rectangle {
+                        horizontal-stretch: 1;
+                        background: transparent;
+
+                        line_input := TextInput {
+                            width: 100%;
+                            height: 100%;
+                            text: line.raw_text;
+                            color: #E8E8EB;
+                            font-family: "Consolas";
+                            font-size: 12.5px;
+                            vertical-alignment: center;
+                            single-line: true;
+                            selection-background-color: #D9283D;
+                            selection-foreground-color: #E8E8EB;
+                            init => {
+                                self.focus();
+                            }
+                            edited => {
+                                root.line_edited(line.line_index, self.text);
+                            }
+                            accepted => {
+                                root.line_newline(line.line_index, self.text);
+                                root.editing_line_idx = line.line_index + 1;
+                            }
+                        }
+                    }
+
+                    if root.editing_line_idx != line.line_index : HorizontalLayout {
+                        horizontal-stretch: 1;
+                        spacing: 0px;
+
+                        if line.t1 != "" : Text { text: line.t1; color: line.c1; font-family: "Consolas"; font-size: 12.5px; vertical-alignment: center; }
+                        if line.t2 != "" : Text { text: line.t2; color: line.c2; font-family: "Consolas"; font-size: 12.5px; vertical-alignment: center; }
+                        if line.t3 != "" : Text { text: line.t3; color: line.c3; font-family: "Consolas"; font-size: 12.5px; vertical-alignment: center; }
+                        if line.t4 != "" : Text { text: line.t4; color: line.c4; font-family: "Consolas"; font-size: 12.5px; vertical-alignment: center; }
+                        if line.t5 != "" : Text { text: line.t5; color: line.c5; font-family: "Consolas"; font-size: 12.5px; vertical-alignment: center; }
+                        if line.t6 != "" : Text { text: line.t6; color: line.c6; font-family: "Consolas"; font-size: 12.5px; vertical-alignment: center; }
+                        if line.t7 != "" : Text { text: line.t7; color: line.c7; font-family: "Consolas"; font-size: 12.5px; vertical-alignment: center; }
+                        if line.t8 != "" : Text { text: line.t8; color: line.c8; font-family: "Consolas"; font-size: 12.5px; vertical-alignment: center; }
+                        if line.t9 != "" : Text { text: line.t9; color: line.c9; font-family: "Consolas"; font-size: 12.5px; vertical-alignment: center; }
+                        if line.t10 != "" : Text { text: line.t10; color: line.c10; font-family: "Consolas"; font-size: 12.5px; vertical-alignment: center; }
+                        if line.t11 != "" : Text { text: line.t11; color: line.c11; font-family: "Consolas"; font-size: 12.5px; vertical-alignment: center; }
+                        if line.t12 != "" : Text { text: line.t12; color: line.c12; font-family: "Consolas"; font-size: 12.5px; vertical-alignment: center; }
+
+                        Rectangle { horizontal-stretch: 1; background: transparent; }
+                    }
+                }
+
+                row_touch := TouchArea {
+                    width: root.editing_line_idx == line.line_index ? 0px : parent.width - 49px;
+                    x: 49px;
+                    height: parent.height;
+                    mouse-cursor: text;
+                    clicked => {
+                        root.line_selected(line.line_index);
+                        root.editing_line_idx = line.line_index;
+                    }
+                }
+            }
+
+            Rectangle {
+                height: 160px;
+                background: #0D0D10;
+
+                TouchArea {
+                    mouse-cursor: text;
+                    clicked => {
+                        root.line_selected(-1);
+                        root.editing_line_idx = -1;
+                        root.request_full_edit();
+                    }
+                }
+            }
+        }
+    }
+}
+
+// =========================================================================
+// KRONOS DESCODE — SCREEN 4: AUTOMATIC 7-PHASE PROJECT ANALYSIS
+// =========================================================================
+
+component KronosAnalysisScreen inherits Rectangle {
+    in property <string> project_name: "";
+    in property <string> project_path: "";
+    in property <[AnalysisPhaseItem]> phases: [];
+    in property <float> progress_percent: 0.0;
+    in property <string> current_op: "";
+    in property <string> live_log: "";
+    in property <bool> is_running: false;
+    in property <bool> is_finished: false;
+    in property <int> verdict_case: 0; // 0=none, 1=Obfuscated, 2=Clean, 3=Incompatible, 4=Threat
+    in property <string> verdict_title: "";
+    in property <string> verdict_summary: "";
+
+    callback enter_workspace();
+    callback cancel_analysis();
+
+    background: #0B0B0D;
+
+    VerticalLayout {
+        padding: 24px;
+        spacing: 16px;
+
+        // Cabecera del Análisis
+        HorizontalLayout {
+            spacing: 12px;
+            alignment: start;
+
+            Rectangle {
+                width: 24px;
+                height: 24px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 4px;
+                background: #D9283D24;
+                border-width: 1px;
+                border-color: #D9283D;
+
+                Path {
+                    width: 12px;
+                    height: 12px;
+                    x: 6px;
+                    y: 6px;
+                    commands: "M 2 1 L 2 11 M 10 1 L 4 6 L 10 11";
+                    stroke: #D9283D;
+                    stroke-width: 1.8px;
+                    fill: transparent;
+                }
+            }
+
+            VerticalLayout {
+                spacing: 2px;
+                Text {
+                    text: "KRONOS DESCODE — PIPELINE DE ANÁLISIS AUTOMÁTICO";
+                    color: #E8E8EB;
+                    font-family: "Segoe UI";
+                    font-size: 13px;
+                    font-weight: 700;
+                    letter-spacing: 1px;
+                }
+                Text {
+                    text: root.project_path != "" ? root.project_path : "Inspección integral de proyecto y evaluación de seguridad";
+                    color: #85858F;
+                    font-family: "Consolas";
+                    font-size: 11px;
+                }
+            }
+
+            Rectangle { horizontal-stretch: 1; }
+
+            if root.is_finished : KronosActionPill {
+                label: "Entrar al Workspace";
+                primary: true;
+                svg_commands: "M 2 1.5 L 8.5 5 L 2 8.5 Z";
+                clicked => { root.enter_workspace(); }
+            }
+
+            if root.is_running : KronosActionPill {
+                label: "Trabajar en segundo plano";
+                clicked => { root.enter_workspace(); }
+            }
+        }
+
+        // Barra de progreso horizontal precisa
+        VerticalLayout {
+            spacing: 6px;
+
+            HorizontalLayout {
+                Text {
+                    text: root.current_op != "" ? root.current_op : (root.is_finished ? "Análisis completado" : "Iniciando análisis...");
+                    color: #E8E8EB;
+                    font-family: "Segoe UI";
+                    font-size: 11px;
+                }
+                Rectangle { horizontal-stretch: 1; }
+                Text {
+                    text: Math.round(root.progress_percent) + "%";
+                    color: #D9283D;
+                    font-family: "Consolas";
+                    font-size: 11px;
+                    font-weight: 700;
+                }
+            }
+
+            // Pista de la barra de progreso
+            Rectangle {
+                height: 4px;
+                background: #151518;
+                border-radius: 2px;
+
+                Rectangle {
+                    x: 0px;
+                    width: parent.width * Math.min(1.0, Math.max(0.0, root.progress_percent / 100.0));
+                    height: 100%;
+                    background: #D9283D;
+                    border-radius: 2px;
+                }
+            }
+        }
+
+        // Área principal dividida: Timeline de 7 fases (izquierda) y Consola en vivo / Dictamen (derecha)
+        HorizontalLayout {
+            vertical-stretch: 1;
+            spacing: 16px;
+
+            // Izquierda: Timeline vertical de las 7 fases
+            Rectangle {
+                width: 400px;
+                background: #101013;
+                border-radius: 4px;
+                border-width: 1px;
+                border-color: #26262B;
+
+                VerticalLayout {
+                    padding: 12px;
+                    spacing: 8px;
+
+                    Text {
+                        text: "FASES DEL PIPELINE (7 ETAPAS)";
+                        color: #85858F;
+                        font-family: "Segoe UI";
+                        font-size: 10px;
+                        font-weight: 700;
+                        letter-spacing: 0.8px;
+                    }
+
+                    Rectangle { height: 1px; background: #26262B; }
+
+                    ScrollView {
+                        vertical-stretch: 1;
+
+                        VerticalLayout {
+                            spacing: 6px;
+                            alignment: start;
+
+                            for phase in root.phases : Rectangle {
+                                height: 52px;
+                                background: phase.status_code == 1 ? #D9283D15 : (phase.status_code == 2 ? #151518 : #0D0D10);
+                                border-radius: 3px;
+                                border-width: 1px;
+                                border-color: phase.status_code == 1 ? #D9283D : (phase.status_code == 4 ? #E5C07B : #26262B);
+
+                                HorizontalLayout {
+                                    padding: 8px;
+                                    spacing: 10px;
+
+                                    // Indicador visual de estado
+                                    Rectangle {
+                                        width: 20px;
+                                        height: 20px;
+                                        y: (parent.height - self.height) / 2;
+                                        border-radius: 10px;
+                                        background: phase.status_code == 2 ? #98C37920 :
+                                                    phase.status_code == 1 ? #D9283D30 :
+                                                    phase.status_code == 3 ? #60606820 :
+                                                    phase.status_code == 4 ? #E5C07B20 : #151518;
+
+                                        Text {
+                                            text: phase.status_code == 2 ? "✓" :
+                                                  phase.status_code == 1 ? "▶" :
+                                                  phase.status_code == 3 ? "—" :
+                                                  phase.status_code == 4 ? "!" : (phase.phase_id + "");
+                                            color: phase.status_code == 2 ? #98C379 :
+                                                   phase.status_code == 1 ? #D9283D :
+                                                   phase.status_code == 3 ? #85858F :
+                                                   phase.status_code == 4 ? #E5C07B : #85858F;
+                                            font-family: "Consolas";
+                                            font-size: 10px;
+                                            font-weight: 700;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+
+                                    VerticalLayout {
+                                        spacing: 2px;
+                                        alignment: center;
+
+                                        HorizontalLayout {
+                                            Text {
+                                                text: phase.name;
+                                                color: phase.status_code == 1 ? #E8E8EB : (phase.status_code == 2 ? #E8E8EB : #85858F);
+                                                font-family: "Segoe UI";
+                                                font-size: 11px;
+                                                font-weight: phase.status_code == 1 || phase.status_code == 2 ? 600 : 400;
+                                            }
+                                            Rectangle { horizontal-stretch: 1; }
+                                            if phase.elapsed_ms > 0 : Text {
+                                                text: phase.elapsed_ms + " ms";
+                                                color: #85858F;
+                                                font-family: "Consolas";
+                                                font-size: 9.5px;
+                                            }
+                                        }
+
+                                        Text {
+                                            text: phase.detail != "" ? phase.detail : phase.status_str;
+                                            color: phase.status_code == 3 ? #85858F : (phase.status_code == 4 ? #E5C07B : #A0A0AA);
+                                            font-family: "Segoe UI";
+                                            font-size: 10px;
+                                            overflow: elide;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Derecha: Dictamen técnico del análisis + Consola en vivo
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 12px;
+
+                // Tarjeta de Dictamen Final
+                if root.is_finished : Rectangle {
+                    height: 140px;
+                    background: root.verdict_case == 1 ? #D9283D15 :
+                                root.verdict_case == 4 ? #D9283D22 :
+                                root.verdict_case == 3 ? #E5C07B18 : #98C37915;
+                    border-radius: 4px;
+                    border-width: 1px;
+                    border-color: root.verdict_case == 1 || root.verdict_case == 4 ? #D9283D :
+                                  root.verdict_case == 3 ? #E5C07B : #98C379;
+
+                    VerticalLayout {
+                        padding: 14px;
+                        spacing: 8px;
+
+                        HorizontalLayout {
+                            spacing: 8px;
+
+                            Text {
+                                text: root.verdict_title != "" ? root.verdict_title : "DICTAMEN DEL ANÁLISIS";
+                                color: root.verdict_case == 1 || root.verdict_case == 4 ? #F13B50 :
+                                       root.verdict_case == 3 ? #E5C07B : #98C379;
+                                font-family: "Segoe UI";
+                                font-size: 13px;
+                                font-weight: 700;
+                            }
+
+                            Rectangle { horizontal-stretch: 1; }
+
+                            KronosActionPill {
+                                label: "Entrar al Workspace";
+                                primary: true;
+                                clicked => { root.enter_workspace(); }
+                            }
+                        }
+
+                        Text {
+                            text: root.verdict_summary;
+                            color: #E8E8EB;
+                            font-family: "Segoe UI";
+                            font-size: 11px;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+
+                // Consola en vivo de actividad del motor
+                Rectangle {
+                    vertical-stretch: 1;
+                    background: #0D0D10;
+                    border-radius: 4px;
+                    border-width: 1px;
+                    border-color: #26262B;
+
+                    VerticalLayout {
+                        padding: 12px;
+                        spacing: 6px;
+
+                        Text {
+                            text: "REGISTRO TÉCNICO EN VIVO (ACTIVIDAD DEL MOTOR)";
+                            color: #85858F;
+                            font-family: "Segoe UI";
+                            font-size: 10px;
+                            font-weight: 700;
+                            letter-spacing: 0.8px;
+                        }
+
+                        Rectangle { height: 1px; background: #26262B; }
+
+                        ScrollView {
+                            vertical-stretch: 1;
+
+                            Text {
+                                text: root.live_log != "" ? root.live_log : "Esperando ejecución de fases...";
+                                color: #A0A0AA;
+                                font-family: "Consolas";
+                                font-size: 10.5px;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// =========================================================================
+// MAIN APPLICATION WINDOW — KRONOS DESCODE
+// =========================================================================
+
+export component AppWindow inherits Window {
+    title: root.window_title;
+    min-width: 1100px;
+    min-height: 700px;
+    preferred-width: 1480px;
+    preferred-height: 880px;
+    background: #0B0B0D;
+
+    // Título y Workspace
+    in-out property <string> window_title: "KRONOS DESCODE";
+    in-out property <string> workspace_folder_name: "";
+    in-out property <string> workspace_folder_path: "";
+    in-out property <[WorkspaceFileItem]> workspace_files: [];
+    in-out property <bool> command_palette_open: false;
+    in-out property <string> command_palette_query: "";
+    in-out property <[PaletteCommandItem]> palette_commands: [];
+
+    // Callbacks de Command Palette
+    callback command_palette_query_changed(string);
+    callback execute_palette_command(int);
+
+    // Pipeline de Análisis Automático del Proyecto
+    in-out property <[AnalysisPhaseItem]> analysis_phases: [];
+    in-out property <float> analysis_progress: 0.0;
+    in-out property <string> analysis_current_op: "";
+    in-out property <string> analysis_live_log: "";
+    in-out property <bool> analysis_is_running: false;
+    in-out property <bool> analysis_is_finished: false;
+    in-out property <string> analysis_verdict_title: "";
+    in-out property <string> analysis_verdict_summary: "";
+    in-out property <int> analysis_verdict_case: 0;
+
+    // Dimensiones redimensionables y estado del Workbench
+    in-out property <length> context_panel_width: 250px;
+    in-out property <length> ai_panel_width: 340px;
+    in-out property <length> bottom_panel_height: 190px;
+    in-out property <bool> ai_panel_expanded: false;
+
+    in-out property <bool> has_open_file: false;
+    in-out property <bool> sidebar_visible: true;
+    in-out property <bool> bottom_panel_visible: false;
+    in-out property <bool> ai_chat_visible: false;
+    in-out property <bool> split_view_enabled: false;
+    in-out property <bool> edit_mode: false;
+    in-out property <int> active_editor_tab: -1; // 0 = original, 1 = ast_reconstruido.py
+    in-out property <int> center_view_mode: 0;   // 0 = Code Editor, 1 = AST Visual Explorer, 2 = Code Diff, 3 = Pipeline Studio
+    in-out property <int> bottom_tab: 0;         // 0 = OUTPUT, 1 = SECURITY, 2 = AST SYMBOLS, 3 = DIFF
+    in-out property <int> active_activity_tab: 0; // 0 = Explorer, 1 = Search, 2 = Reverse Eng, 3 = AST Explorer, 4 = Pipeline, 5 = Analysis History, 6 = Settings
+    in-out property <bool> tab_input_open: true;
+    in-out property <bool> tab_output_open: true;
+    in-out property <int> active_tab_index: -1;
+    in-out property <[EditorTabItem]> open_tabs: [];
+    in-out property <int> chat_tab: 0;
+    in-out property <string> selected_model: "gemini-3.1-flash-lite";
+    in-out property <string> selected_ai_mode: "Deobfuscate";
+    in-out property <bool> model_dropdown_open: false;
+    in-out property <bool> mode_dropdown_open: false;
+
+    // Secciones plegables
+    in-out property <bool> sec_workspace_open: true;
+    in-out property <bool> sec_passes_open: true;
+    in-out property <bool> sec_security_open: true;
+    in-out property <bool> ai_key_open: false;
+    in-out property <bool> opt_hide_comments: false;
+
+    // Estado de línea activa en edición inline
+    in-out property <int> input_editing_line: -1;
+    in-out property <int> output_editing_line: -1;
+
+    // Búsqueda global
+    in-out property <string> search_query: "";
+
+    // Buffers de Código y Modelos
+    in-out property <string> input_code: "";
+    in-out property <string> output_code: "";
+    in-out property <string> input_line_numbers: "1";
+    in-out property <string> output_line_numbers: "1";
+    in-out property <[SyntaxLine]> input_lines: [];
+    in-out property <[SyntaxLine]> output_lines: [];
+    in-out property <[AstVisualNode]> ast_nodes: [];
+    in-out property <[HistoryUiItem]> history_items: [];
+
+    // Archivo activo
+    in-out property <string> active_filename: "";
+    in-out property <int> active_sample_index: -1;
+
+    // Opciones del Pipeline AST
+    in-out property <bool> opt_normalize_vars: true;
+    in-out property <bool> opt_remove_dead_code: true;
+    in-out property <bool> opt_decode_strings: true;
+
+    // Telemetría y Seguridad
+    in-out property <int> stat_strings_decoded: 0;
+    in-out property <int> stat_constants_folded: 0;
+    in-out property <int> stat_vars_renamed: 0;
+    in-out property <int> stat_dead_branches: 0;
+    in-out property <int> security_alerts_count: 0;
+    in-out property <bool> security_is_safe: true;
+    in-out property <string> security_badge_text: "0 alerts";
+    in-out property <string> input_hash_short: "";
+    in-out property <string> output_hash_short: "";
+
+    // Contenido del Panel Inferior
+    in-out property <string> console_log: "";
+    in-out property <string> security_report: "";
+    in-out property <string> tokens_preview: "";
+    in-out property <string> diff_preview: "";
+    in-out property <string> status_text: "Ready";
+
+    // Estado de KRONOS AI
+    in-out property <string> gemini_api_key: "";
+    in-out property <string> chat_input_text: "";
+    in-out property <bool> ai_busy: false;
+    in-out property <string> ai_status_badge: "";
+    in-out property <string> last_ai_code_suggestion: "";
+    in-out property <[ChatMessage]> chat_messages: [];
+
+    // Callbacks hacia Rust
+    callback run_deobfuscation();
+    callback open_file();
+    callback open_folder();
+    callback select_workspace_file(int);
+    callback save_file();
+    callback copy_output();
+    callback paste_clipboard();
+    callback clear_all();
+    callback new_blank_file();
+
+    // Callbacks de edición directa en vivo
+    callback select_input_line(int);
+    callback edit_input_line(int, string);
+    callback insert_input_newline(int, string);
+    callback select_output_line(int);
+    callback edit_output_line(int, string);
+    callback insert_output_newline(int, string);
+    callback input_code_changed(string);
+    callback output_code_changed(string);
+    callback search_query_changed(string);
+
+    // Callbacks de KRONOS AI
+    callback send_chat_prompt(string);
+    callback trigger_contextual_ai_action(string);
+    callback apply_ai_code_to_editor();
+    callback copy_chat_code(string);
+    callback clear_chat_history();
+    callback select_model(string);
+    callback select_ai_mode(string);
+    callback save_session_state();
+
+    // Callbacks de Pestañas del Editor
+    callback close_editor_tab(int);
+    callback select_editor_tab(int);
+
+    // Callbacks del Pipeline de Análisis y Navegación
+    callback toggle_folder_expand(string);
+    callback enter_workspace();
+    callback cancel_analysis();
+
+    forward-focus: root_focus;
+
+    root_focus := FocusScope {
+        key-pressed(ev) => {
+            if (ev.modifiers.control && (ev.text == "p" || ev.text == "P")) {
+                root.command_palette_open = !root.command_palette_open;
+                return accept;
+            }
+            if (ev.modifiers.control && (ev.text == "b" || ev.text == "B")) {
+                root.sidebar_visible = !root.sidebar_visible;
+                root.save_session_state();
+                return accept;
+            }
+            if (ev.modifiers.control && (ev.text == "j" || ev.text == "J")) {
+                root.bottom_panel_visible = !root.bottom_panel_visible;
+                root.save_session_state();
+                return accept;
+            }
+            if (ev.modifiers.control && (ev.text == "l" || ev.text == "L")) {
+                root.ai_chat_visible = !root.ai_chat_visible;
+                root.save_session_state();
+                return accept;
+            }
+            if (ev.modifiers.control && (ev.text == "o" || ev.text == "O")) {
+                root.open_file();
+                return accept;
+            }
+            if (ev.modifiers.control && (ev.text == "s" || ev.text == "S")) {
+                root.save_file();
+                return accept;
+            }
+            if (ev.modifiers.control && (ev.text == "n" || ev.text == "N")) {
+                root.new_blank_file();
+                return accept;
+            }
+            if (ev.text == Key.F5) {
+                root.run_deobfuscation();
+                root.active_editor_tab = 1;
+                return accept;
+            }
+            if (ev.text == Key.Escape) {
+                if (root.command_palette_open) {
+                    root.command_palette_open = false;
+                    return accept;
+                }
+                if (root.center_view_mode != 0) {
+                    root.center_view_mode = 0;
+                    return accept;
+                }
+            }
+            return reject;
+        }
+
+        VerticalLayout {
+            spacing: 0px;
+
+        // =========================================================================
+        // A. BARRA SUPERIOR COMPACTA (32px, #101013)
+        // =========================================================================
+        Rectangle {
+            height: 32px;
+            background: #101013;
+
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 10px;
+                spacing: 4px;
+
+                // Logotipo geométrico original KRONOS DESCODE
+                Rectangle {
+                    width: 18px;
+                    height: 18px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 2px;
+                    background: #D9283D24;
+                    border-width: 1px;
+                    border-color: #D9283D;
+
+                    Path {
+                        width: 10px;
+                        height: 10px;
+                        x: 4px;
+                        y: 4px;
+                        commands: "M 2 1 L 2 9 M 8 1 L 3 5 L 8 9";
+                        stroke: #D9283D;
+                        stroke-width: 1.5px;
+                        fill: transparent;
+                    }
+                }
+
+                Rectangle { width: 4px; }
+
+                Text {
+                    text: "KRONOS";
+                    color: #E8E8EB;
+                    font-family: "Segoe UI";
+                    font-size: 11px;
+                    font-weight: 700;
+                    letter-spacing: 0.8px;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    text: "DESCODE";
+                    color: #D9283D;
+                    font-family: "Segoe UI";
+                    font-size: 11px;
+                    font-weight: 700;
+                    letter-spacing: 0.8px;
+                    vertical-alignment: center;
+                }
+
+                // Indicador del proyecto actual si está abierto
+                if root.workspace_folder_name != "" : HorizontalLayout {
+                    padding-left: 8px;
+                    spacing: 4px;
+
+                    Rectangle {
+                        height: 20px;
+                        width: proj_lbl.preferred-width + 12px;
+                        y: (parent.height - self.height) / 2;
+                        border-radius: 2px;
+                        background: #151518;
+                        border-width: 1px;
+                        border-color: #26262B;
+
+                        proj_lbl := Text {
+                            text: root.workspace_folder_name;
+                            color: #85858F;
+                            font-family: "Consolas";
+                            font-size: 9.5px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                Rectangle { horizontal-stretch: 1; }
+
+                // Centro: buscador compacto Ctrl+P que activa la Command Palette flotante
+                Rectangle {
+                    width: 320px;
+                    height: 22px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 2px;
+                    background: search_bar_touch.has-hover ? #151518 : #0D0D10;
+                    border-width: 1px;
+                    border-color: search_bar_touch.has-hover ? #D9283D : #26262B;
+
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 6px;
+                        spacing: 6px;
+
+                        Path {
+                            width: 10px;
+                            height: 10px;
+                            y: (parent.height - self.height) / 2;
+                            commands: "M 4.5 1 A 3.5 3.5 0 1 0 4.5 8 A 3.5 3.5 0 1 0 4.5 1 M 7.2 7.2 L 9.5 9.5";
+                            stroke: search_bar_touch.has-hover ? #E8E8EB : #85858F;
+                            stroke-width: 1.1px;
+                            fill: transparent;
+                        }
+
+                        Text {
+                            horizontal-stretch: 1;
+                            text: "Buscar comando o archivo...";
+                            color: #85858F;
+                            font-family: "Segoe UI";
+                            font-size: 10.5px;
+                            vertical-alignment: center;
+                        }
+
+                        Rectangle {
+                            width: 38px;
+                            height: 15px;
+                            y: (parent.height - self.height) / 2;
+                            border-radius: 2px;
+                            background: #151518;
+                            border-width: 1px;
+                            border-color: #26262B;
+
+                            Text {
+                                text: "Ctrl+P";
+                                color: #85858F;
+                                font-family: "Consolas";
+                                font-size: 9px;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+
+                    search_bar_touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.command_palette_open = !root.command_palette_open;
+                        }
+                    }
+                }
+
+                Rectangle { horizontal-stretch: 1; }
+
+                // Controles discretos de disposición de paneles
+                KronosIconButton {
+                    active: root.sidebar_visible;
+                    svg_commands: "M 1 2 L 11 2 L 11 10 L 1 10 Z M 4.5 2 L 4.5 10";
+                    clicked => {
+                        root.sidebar_visible = !root.sidebar_visible;
+                        root.save_session_state();
+                    }
+                }
+
+                KronosIconButton {
+                    active: root.split_view_enabled;
+                    svg_commands: "M 1 2 L 11 2 L 11 10 L 1 10 Z M 6 2 L 6 10";
+                    clicked => {
+                        if (root.open_tabs.length > 0) {
+                            root.split_view_enabled = !root.split_view_enabled;
+                            root.save_session_state();
+                        }
+                    }
+                }
+
+                KronosIconButton {
+                    active: root.bottom_panel_visible;
+                    svg_commands: "M 1 2 L 11 2 L 11 10 L 1 10 Z M 1 7 L 11 7";
+                    clicked => {
+                        root.bottom_panel_visible = !root.bottom_panel_visible;
+                        root.save_session_state();
+                    }
+                }
+
+                KronosIconButton {
+                    active: root.ai_chat_visible;
+                    svg_commands: "M 1 2 L 11 2 L 11 10 L 1 10 Z M 7.5 2 L 7.5 10";
+                    clicked => {
+                        root.ai_chat_visible = !root.ai_chat_visible;
+                        root.save_session_state();
+                    }
+                }
+            }
+        }
+
+        Rectangle { height: 1px; background: #26262B; }
+
+        // =========================================================================
+        // B-E. ÁREA PRINCIPAL DE 4 COLUMNAS (Rail + Context Panel + Workspace + KRONOS AI)
+        // =========================================================================
+        HorizontalLayout {
+            vertical-stretch: 1;
+            spacing: 0px;
+
+            // ---------------------------------------------------------------------
+            // B. BARRA LATERAL IZQUIERDA DE NAVEGACIÓN (44px, #101013)
+            // ---------------------------------------------------------------------
+            Rectangle {
+                width: 44px;
+                background: #101013;
+
+                VerticalLayout {
+                    padding-top: 4px;
+                    padding-bottom: 4px;
+                    spacing: 2px;
+
+                    // 0. Explorer & Workspace Files
+                    ActivityBarIcon {
+                        active: root.sidebar_visible && root.active_activity_tab == 0;
+                        svg_commands: "M 2 2 L 7 2 L 9 4 L 14 4 L 14 14 L 2 14 Z";
+                        clicked => {
+                            if (root.active_activity_tab == 0 && root.sidebar_visible) {
+                                root.sidebar_visible = false;
+                            } else {
+                                root.active_activity_tab = 0;
+                                root.sidebar_visible = true;
+                            }
+                            root.save_session_state();
+                        }
+                    }
+
+                    // 1. Global Search & Token Filter
+                    ActivityBarIcon {
+                        active: root.sidebar_visible && root.active_activity_tab == 1;
+                        svg_commands: "M 7 2 A 5 5 0 1 0 7 12 A 5 5 0 1 0 7 2 M 11 11 L 15 15";
+                        clicked => {
+                            if (root.active_activity_tab == 1 && root.sidebar_visible) {
+                                root.sidebar_visible = false;
+                            } else {
+                                root.active_activity_tab = 1;
+                                root.sidebar_visible = true;
+                            }
+                            root.save_session_state();
+                        }
+                    }
+
+                    // 2. Reverse Engineering & Security Guardrails
+                    ActivityBarIcon {
+                        active: root.sidebar_visible && root.active_activity_tab == 2;
+                        has_badge: !root.security_is_safe;
+                        svg_commands: "M 8 1.5 L 14 4 L 14 8.5 C 14 12 11.2 14.2 8 15.5 C 4.8 14.2 2 12 2 8.5 L 2 4 Z";
+                        clicked => {
+                            if (root.active_activity_tab == 2 && root.sidebar_visible) {
+                                root.sidebar_visible = false;
+                            } else {
+                                root.active_activity_tab = 2;
+                                root.sidebar_visible = true;
+                            }
+                            root.save_session_state();
+                        }
+                    }
+
+                    // 3. AST Visual Explorer
+                    ActivityBarIcon {
+                        active: (root.sidebar_visible && root.active_activity_tab == 3) || root.center_view_mode == 1;
+                        svg_commands: "M 8 2 L 11 5 L 8 8 L 5 5 Z M 3 11 L 6 11 L 6 14 L 3 14 Z M 10 11 L 13 11 L 13 14 L 10 14 Z M 6.5 6.5 L 4.5 11 M 9.5 6.5 L 11.5 11";
+                        clicked => {
+                            root.active_activity_tab = 3;
+                            root.sidebar_visible = true;
+                            root.center_view_mode = root.center_view_mode == 1 ? 0 : 1;
+                            root.save_session_state();
+                        }
+                    }
+
+                    // 4. Transformation Pipeline & Diff
+                    ActivityBarIcon {
+                        active: (root.sidebar_visible && root.active_activity_tab == 4) || root.center_view_mode == 2;
+                        svg_commands: "M 2 4 L 14 4 M 2 8 L 14 8 M 2 12 L 14 12 M 5 2 L 5 6 M 11 6 L 11 10 M 7 10 L 7 14";
+                        clicked => {
+                            if (root.active_activity_tab == 4 && root.sidebar_visible) {
+                                root.sidebar_visible = false;
+                            } else {
+                                root.active_activity_tab = 4;
+                                root.sidebar_visible = true;
+                            }
+                            root.save_session_state();
+                        }
+                    }
+
+                    // 5. Analysis History
+                    ActivityBarIcon {
+                        active: root.sidebar_visible && root.active_activity_tab == 5;
+                        svg_commands: "M 8 2 A 6 6 0 1 0 8 14 A 6 6 0 1 0 8 2 M 8 5 L 8 8.5 L 10.5 10";
+                        clicked => {
+                            if (root.active_activity_tab == 5 && root.sidebar_visible) {
+                                root.sidebar_visible = false;
+                            } else {
+                                root.active_activity_tab = 5;
+                                root.sidebar_visible = true;
+                            }
+                            root.save_session_state();
+                        }
+                    }
+
+                    Rectangle { vertical-stretch: 1; }
+
+                    // KRONOS AI Quick Toggle
+                    ActivityBarIcon {
+                        active: root.ai_chat_visible;
+                        svg_commands: "M 8 1.5 L 9.8 6.2 L 14.5 8 L 9.8 9.8 L 8 14.5 L 6.2 9.8 L 1.5 8 L 6.2 6.2 Z";
+                        clicked => {
+                            root.ai_chat_visible = !root.ai_chat_visible;
+                            root.save_session_state();
+                        }
+                    }
+
+                    // 6. Settings & Preferences
+                    ActivityBarIcon {
+                        active: root.sidebar_visible && root.active_activity_tab == 6;
+                        svg_commands: "M 8 5 A 3 3 0 1 0 8 11 A 3 3 0 1 0 8 5 M 8 1.5 L 8 3.5 M 8 12.5 L 8 14.5 M 1.5 8 L 3.5 8 M 12.5 8 L 14.5 8";
+                        clicked => {
+                            if (root.active_activity_tab == 6 && root.sidebar_visible) {
+                                root.sidebar_visible = false;
+                            } else {
+                                root.active_activity_tab = 6;
+                                root.sidebar_visible = true;
+                            }
+                            root.save_session_state();
+                        }
+                    }
+                }
+            }
+
+            Rectangle { width: 1px; background: #26262B; }
+
+            // ---------------------------------------------------------------------
+            // C. PANEL LATERAL CONTEXTUAL REDIMENSIONABLE (#101013)
+            // ---------------------------------------------------------------------
+            if root.sidebar_visible : Rectangle {
+                width: root.context_panel_width;
+                background: #101013;
+
+                VerticalLayout {
+                    spacing: 0px;
+
+                    // Cabecera dinámica según herramienta activa
+                    Rectangle {
+                        height: 34px;
+                        background: #101013;
+
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 8px;
+                            spacing: 4px;
+
+                            Text {
+                                text: root.active_activity_tab == 0 ? (root.workspace_folder_name != "" ? root.workspace_folder_name : "EXPLORER") :
+                                      root.active_activity_tab == 1 ? "SEARCH" :
+                                      root.active_activity_tab == 2 ? "SECURITY AUDIT" :
+                                      root.active_activity_tab == 3 ? "AST OUTLINE" :
+                                      root.active_activity_tab == 4 ? "PIPELINE" :
+                                      root.active_activity_tab == 5 ? "HISTORY" :
+                                      "PREFERENCES";
+                                color: #E8E8EB;
+                                font-family: "Segoe UI";
+                                font-size: 10px;
+                                font-weight: 700;
+                                letter-spacing: 0.8px;
+                                vertical-alignment: center;
+                            }
+
+                            Rectangle { horizontal-stretch: 1; }
+
+                            if root.active_activity_tab == 0 : HorizontalLayout {
+                                spacing: 2px;
+
+                                KronosIconButton {
+                                    svg_commands: "M 1 2 L 4.5 2 L 6 3.5 L 11 3.5 L 11 10 L 1 10 Z";
+                                    clicked => { root.open_folder(); }
+                                }
+                                KronosIconButton {
+                                    svg_commands: "M 2 1 L 7.5 1 L 10 3.5 L 10 11 L 2 11 Z M 7.5 1 L 7.5 3.5 L 10 3.5";
+                                    clicked => { root.open_file(); }
+                                }
+                                KronosIconButton {
+                                    svg_commands: "M 6 2 L 6 10 M 2 6 L 10 6";
+                                    clicked => { root.new_blank_file(); }
+                                }
+                            }
+
+                            KronosIconButton {
+                                svg_commands: "M 2.5 2.5 L 9.5 9.5 M 9.5 2.5 L 2.5 9.5";
+                                clicked => {
+                                    root.sidebar_visible = false;
+                                    root.save_session_state();
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle { height: 1px; background: #26262B; }
+
+                    // VISTA 0: EXPLORER (Archivos y Carpetas del Proyecto)
+                    if root.active_activity_tab == 0 : VerticalLayout {
+                        vertical-stretch: 1;
+                        spacing: 0px;
+
+                        if root.workspace_files.length > 0 : ScrollView {
+                            width: 100%;
+                            vertical-stretch: 1;
+
+                            VerticalLayout {
+                                alignment: start;
+                                spacing: 0px;
+
+                                for item[idx] in root.workspace_files : KronosExplorerRow {
+                                    filename: item.name;
+                                    is_directory: item.is_dir;
+                                    is_python: item.is_python;
+                                    depth: item.depth;
+                                    is_expanded: item.is_expanded;
+                                    has_children: item.has_children;
+                                    icon_type: item.icon_type;
+                                    size_str: item.size_str;
+                                    selected: item.is_active || (root.has_open_file && root.active_filename == item.name);
+                                    clicked => {
+                                        if (item.is_dir) {
+                                            root.toggle_folder_expand(item.full_path);
+                                        } else {
+                                            root.center_view_mode = 0;
+                                            root.select_workspace_file(idx);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if root.workspace_files.length == 0 && root.open_tabs.length > 0 : VerticalLayout {
+                            spacing: 0px;
+                            for tab[idx] in root.open_tabs : KronosExplorerRow {
+                                filename: tab.title;
+                                is_directory: false;
+                                is_python: true;
+                                depth: 0;
+                                selected: root.has_open_file && root.active_tab_index == idx;
+                                clicked => {
+                                    root.has_open_file = true;
+                                    root.center_view_mode = 0;
+                                    root.active_tab_index = idx;
+                                    root.active_editor_tab = tab.tab_type;
+                                    root.select_editor_tab(idx);
+                                }
+                            }
+                        }
+                    }
+
+                    // VISTA 1: SEARCH
+                    if root.active_activity_tab == 1 : VerticalLayout {
+                        padding: 12px;
+                        spacing: 8px;
+                        alignment: start;
+
+                        Rectangle {
+                            height: 28px;
+                            border-radius: 2px;
+                            background: #0D0D10;
+                            border-width: 1px;
+                            border-color: #26262B;
+
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                padding-right: 8px;
+
+                                TextInput {
+                                    width: 100%;
+                                    height: 100%;
+                                    text <=> root.search_query;
+                                    color: #E8E8EB;
+                                    font-family: "Consolas";
+                                    font-size: 11px;
+                                    vertical-alignment: center;
+                                    single-line: true;
+                                    edited => { root.search_query_changed(self.text); }
+                                }
+                            }
+                        }
+
+                        KronosActionPill {
+                            width: 100%;
+                            label: root.opt_hide_comments ? "Mostrar comentarios (#)" : "Ocultar comentarios (#)";
+                            active: root.opt_hide_comments;
+                            clicked => {
+                                root.opt_hide_comments = !root.opt_hide_comments;
+                                root.run_deobfuscation();
+                            }
+                        }
+                    }
+
+                    // VISTA 2: SECURITY AUDIT
+                    if root.active_activity_tab == 2 : VerticalLayout {
+                        spacing: 0px;
+                        vertical-stretch: 1;
+
+                        if root.has_open_file : VerticalLayout {
+                            padding: 14px;
+                            spacing: 10px;
+
+                            HorizontalLayout {
+                                spacing: 8px;
+                                Rectangle {
+                                    width: 6px;
+                                    height: 6px;
+                                    y: (parent.height - self.height) / 2;
+                                    border-radius: 3px;
+                                    background: root.security_is_safe ? #4EC9B0 : #D9283D;
+                                }
+                                Text {
+                                    text: root.security_is_safe ? "Seguro (0 alertas)" : ("Alertas detectadas (" + root.security_alerts_count + ")");
+                                    color: #E8E8EB;
+                                    font-family: "Segoe UI";
+                                    font-size: 11px;
+                                    font-weight: 600;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            Rectangle { height: 1px; background: #26262B; }
+
+                            HorizontalLayout {
+                                Text { text: "Cadenas decodificadas"; color: #85858F; font-size: 10.5px; }
+                                Rectangle { horizontal-stretch: 1; }
+                                Text { text: root.stat_strings_decoded + ""; color: #E8E8EB; font-family: "Consolas"; font-size: 10.5px; }
+                            }
+                            HorizontalLayout {
+                                Text { text: "Constantes calculadas"; color: #85858F; font-size: 10.5px; }
+                                Rectangle { horizontal-stretch: 1; }
+                                Text { text: root.stat_constants_folded + ""; color: #E8E8EB; font-family: "Consolas"; font-size: 10.5px; }
+                            }
+                            HorizontalLayout {
+                                Text { text: "Símbolos normalizados"; color: #85858F; font-size: 10.5px; }
+                                Rectangle { horizontal-stretch: 1; }
+                                Text { text: root.stat_vars_renamed + ""; color: #E8E8EB; font-family: "Consolas"; font-size: 10.5px; }
+                            }
+                            HorizontalLayout {
+                                Text { text: "Ramas podadas"; color: #85858F; font-size: 10.5px; }
+                                Rectangle { horizontal-stretch: 1; }
+                                Text { text: root.stat_dead_branches + ""; color: #E8E8EB; font-family: "Consolas"; font-size: 10.5px; }
+                            }
+
+                            Rectangle { height: 6px; }
+
+                            KronosActionPill {
+                                width: 100%;
+                                label: "Desofuscar archivo";
+                                primary: true;
+                                clicked => {
+                                    root.run_deobfuscation();
+                                    root.active_editor_tab = 1;
+                                }
+                            }
+
+                            KronosActionPill {
+                                width: 100%;
+                                label: "Ver diferencias (Diff)";
+                                active: root.center_view_mode == 2;
+                                clicked => { root.center_view_mode = root.center_view_mode == 2 ? 0 : 2; }
+                            }
+                        }
+
+                        Rectangle { vertical-stretch: 1; }
+                    }
+
+                    // VISTA 3: AST OUTLINE
+                    if root.active_activity_tab == 3 : VerticalLayout {
+                        vertical-stretch: 1;
+                        spacing: 0px;
+
+                        ScrollView {
+                            width: 100%;
+                            vertical-stretch: 1;
+
+                            VerticalLayout {
+                                alignment: start;
+                                spacing: 0px;
+
+                                for node[n_idx] in root.ast_nodes : Rectangle {
+                                    height: 24px;
+                                    background: node_touch.has-hover ? #151518 : transparent;
+
+                                    HorizontalLayout {
+                                        padding-left: 10px + (node.depth * 10px);
+                                        padding-right: 8px;
+                                        spacing: 6px;
+
+                                        Rectangle {
+                                            width: 6px;
+                                            height: 6px;
+                                            y: (parent.height - self.height) / 2;
+                                            border-radius: 3px;
+                                            background: node.is_alert ? #D9283D : #85858F;
+                                        }
+
+                                        Text {
+                                            text: node.node_type;
+                                            color: node.is_alert ? #F13B50 : #D9283D;
+                                            font-family: "Consolas";
+                                            font-size: 10.5px;
+                                            font-weight: 600;
+                                            vertical-alignment: center;
+                                        }
+
+                                        Text {
+                                            horizontal-stretch: 1;
+                                            text: node.name;
+                                            color: #E8E8EB;
+                                            font-family: "Consolas";
+                                            font-size: 10.5px;
+                                            vertical-alignment: center;
+                                            overflow: elide;
+                                        }
+
+                                        Text {
+                                            text: "L" + node.line_number;
+                                            color: #85858F;
+                                            font-family: "Consolas";
+                                            font-size: 9.5px;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+
+                                    node_touch := TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => {
+                                            if (node.line_number > 0) {
+                                                root.center_view_mode = 0;
+                                                root.select_input_line(node.line_number - 1);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // VISTA 4: PIPELINE
+                    if root.active_activity_tab == 4 : VerticalLayout {
+                        spacing: 0px;
+                        vertical-stretch: 1;
+
+                        VerticalLayout {
+                            padding-top: 6px;
+                            padding-bottom: 6px;
+                            spacing: 2px;
+
+                            PipelineToggleRow {
+                                label: "Decodificar cadenas estáticas";
+                                description: "";
+                                checked: root.opt_decode_strings;
+                                toggled => {
+                                    root.opt_decode_strings = !root.opt_decode_strings;
+                                    root.run_deobfuscation();
+                                    root.save_session_state();
+                                }
+                            }
+
+                            PipelineToggleRow {
+                                label: "Normalizar identificadores";
+                                description: "";
+                                checked: root.opt_normalize_vars;
+                                toggled => {
+                                    root.opt_normalize_vars = !root.opt_normalize_vars;
+                                    root.run_deobfuscation();
+                                    root.save_session_state();
+                                }
+                            }
+
+                            PipelineToggleRow {
+                                label: "Podar ramas muertas";
+                                description: "";
+                                checked: root.opt_remove_dead_code;
+                                toggled => {
+                                    root.opt_remove_dead_code = !root.opt_remove_dead_code;
+                                    root.run_deobfuscation();
+                                    root.save_session_state();
+                                }
+                            }
+
+                            PipelineToggleRow {
+                                label: "Ocultar comentarios (#)";
+                                description: "";
+                                checked: root.opt_hide_comments;
+                                toggled => {
+                                    root.opt_hide_comments = !root.opt_hide_comments;
+                                    root.run_deobfuscation();
+                                    root.save_session_state();
+                                }
+                            }
+                        }
+
+                        VerticalLayout {
+                            padding: 12px;
+                            spacing: 8px;
+
+                            KronosActionPill {
+                                width: 100%;
+                                label: "Ejecutar pipeline";
+                                primary: true;
+                                clicked => {
+                                    root.run_deobfuscation();
+                                    root.active_editor_tab = 1;
+                                }
+                            }
+                        }
+
+                        Rectangle { vertical-stretch: 1; }
+                    }
+
+                    // VISTA 5: ANALYSIS HISTORY
+                    if root.active_activity_tab == 5 : VerticalLayout {
+                        vertical-stretch: 1;
+                        spacing: 0px;
+
+                        if root.history_items.length > 0 : ScrollView {
+                            width: 100%;
+                            vertical-stretch: 1;
+
+                            VerticalLayout {
+                                alignment: start;
+                                spacing: 0px;
+
+                                for h_item[h_idx] in root.history_items : Rectangle {
+                                    height: 46px;
+                                    background: #101013;
+
+                                    VerticalLayout {
+                                        padding-left: 12px;
+                                        padding-right: 12px;
+                                        padding-top: 6px;
+                                        padding-bottom: 6px;
+                                        spacing: 2px;
+
+                                        HorizontalLayout {
+                                            Text {
+                                                text: h_item.filename;
+                                                color: #E8E8EB;
+                                                font-family: "Segoe UI";
+                                                font-size: 11px;
+                                                font-weight: 600;
+                                                overflow: elide;
+                                            }
+                                            Rectangle { horizontal-stretch: 1; }
+                                            Text {
+                                                text: h_item.timestamp;
+                                                color: #85858F;
+                                                font-family: "Consolas";
+                                                font-size: 9.5px;
+                                            }
+                                        }
+
+                                        HorizontalLayout {
+                                            Text {
+                                                text: h_item.ops_summary;
+                                                color: #85858F;
+                                                font-family: "Consolas";
+                                                font-size: 10px;
+                                                overflow: elide;
+                                            }
+                                            Rectangle { horizontal-stretch: 1; }
+                                            Text {
+                                                text: h_item.status_badge;
+                                                color: h_item.is_safe ? #4EC9B0 : #D9283D;
+                                                font-family: "Consolas";
+                                                font-size: 9.5px;
+                                                font-weight: 600;
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        y: parent.height - 1px;
+                                        height: 1px;
+                                        width: 100%;
+                                        background: #26262B;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // VISTA 6: SETTINGS & PREFERENCES
+                    if root.active_activity_tab == 6 : VerticalLayout {
+                        padding: 14px;
+                        spacing: 10px;
+                        alignment: start;
+
+                        Text {
+                            text: "API Key";
+                            color: #85858F;
+                            font-family: "Segoe UI";
+                            font-size: 10px;
+                            font-weight: 600;
+                        }
+
+                        Rectangle {
+                            height: 28px;
+                            border-radius: 2px;
+                            background: #0D0D10;
+                            border-width: 1px;
+                            border-color: #26262B;
+
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                padding-right: 8px;
+
+                                TextInput {
+                                    width: 100%;
+                                    height: 100%;
+                                    text <=> root.gemini_api_key;
+                                    color: #E8E8EB;
+                                    font-family: "Consolas";
+                                    font-size: 10.5px;
+                                    vertical-alignment: center;
+                                    single-line: true;
+                                }
+                            }
+                        }
+
+                        Text {
+                            text: "Modelo Gemini";
+                            color: #85858F;
+                            font-family: "Segoe UI";
+                            font-size: 10px;
+                            font-weight: 600;
+                        }
+
+                        KronosActionPill {
+                            width: 100%;
+                            label: "gemini-3.1-flash-lite";
+                            active: root.selected_model == "gemini-3.1-flash-lite";
+                            clicked => { root.select_model("gemini-3.1-flash-lite"); }
+                        }
+
+                        KronosActionPill {
+                            width: 100%;
+                            label: "gemini-3.8-flash";
+                            active: root.selected_model == "gemini-3.8-flash";
+                            clicked => { root.select_model("gemini-3.8-flash"); }
+                        }
+
+                        Rectangle { height: 4px; }
+
+                        KronosActionPill {
+                            width: 100%;
+                            label: "Guardar preferencias";
+                            primary: true;
+                            clicked => { root.save_session_state(); }
+                        }
+                    }
+                }
+            }
+
+            // Divisor redimensionable (Splitter) entre Context Panel y Workspace Central
+            if root.sidebar_visible : Rectangle {
+                width: 4px;
+                background: left_splitter_touch.has-hover || left_splitter_touch.pressed ? #D9283D : #26262B;
+
+                left_splitter_touch := TouchArea {
+                    mouse-cursor: ew-resize;
+                    moved => {
+                        if (self.pressed) {
+                            root.context_panel_width = clamp(root.context_panel_width + (self.mouse-x - self.pressed-x), 180px, 520px);
+                        }
+                    }
+                    pointer-event(ev) => {
+                        if (ev.kind == PointerEventKind.up) {
+                            root.save_session_state();
+                        }
+                    }
+                }
+            }
+
+            // ---------------------------------------------------------------------
+            // D. ÁREA CENTRAL DE TRABAJO PROTAGONISTA (#0D0D10)
+            // ---------------------------------------------------------------------
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 0px;
+
+                // ESTADO 1: ESPACIO DE TRABAJO LIMPIO Y SOBRIO CUANDO NO HAY ARCHIVO ABIERTO
+                if !root.has_open_file && root.center_view_mode == 0 : Rectangle {
+                    vertical-stretch: 1;
+                    background: #0B0B0D;
+                }
+
+                // ESTADO 2: WORKSPACE ACTIVO (Pestañas de Archivos + Editor Central)
+                if root.has_open_file || root.center_view_mode != 0 : VerticalLayout {
+                    vertical-stretch: 1;
+                    spacing: 0px;
+
+                    // Barra de Pestañas de Archivos (34px, #101013)
+                    Rectangle {
+                        height: 34px;
+                        background: #101013;
+
+                        HorizontalLayout {
+                            spacing: 0px;
+
+                            for tab[idx] in root.open_tabs : HorizontalLayout {
+                                spacing: 0px;
+
+                                KronosEditorTab {
+                                    title: tab.title;
+                                    active: root.center_view_mode == 0 && (root.active_tab_index == idx || (root.split_view_enabled && root.open_tabs.length > 1));
+                                    dot_color: tab.dot_color;
+                                    selected => {
+                                        root.center_view_mode = 0;
+                                        root.input_editing_line = -1;
+                                        root.output_editing_line = -1;
+                                        root.active_tab_index = idx;
+                                        root.active_editor_tab = tab.tab_type;
+                                        root.select_editor_tab(idx);
+                                    }
+                                    close_clicked => {
+                                        root.close_editor_tab(idx);
+                                    }
+                                }
+
+                                Rectangle { width: 1px; background: #26262B; }
+                            }
+
+                            Rectangle { horizontal-stretch: 1; background: #101013; }
+                        }
+                    }
+
+                    Rectangle { height: 1px; background: #26262B; }
+
+                    // -----------------------------------------------------------------
+                    // MODO CENTRAL 0: EDITOR DE CÓDIGO (Único o Dividido)
+                    // -----------------------------------------------------------------
+                    if root.center_view_mode == 0 : HorizontalLayout {
+                        vertical-stretch: 1;
+                        spacing: 0px;
+
+                        if !root.split_view_enabled : Rectangle {
+                            horizontal-stretch: 1;
+                            background: #0D0D10;
+
+                            if root.active_editor_tab == 0 && !root.edit_mode : KronosCodeSurface {
+                                width: 100%;
+                                height: 100%;
+                                lines: root.input_lines;
+                                editing_line_idx <=> root.input_editing_line;
+                                comments_hidden: root.opt_hide_comments;
+                                line_selected(line_idx) => { root.select_input_line(line_idx); }
+                                line_edited(line_idx, new_txt) => { root.edit_input_line(line_idx, new_txt); }
+                                line_newline(line_idx, curr_txt) => { root.insert_input_newline(line_idx, curr_txt); }
+                                toggle_hide_comments => {
+                                    root.opt_hide_comments = !root.opt_hide_comments;
+                                    root.run_deobfuscation();
+                                }
+                                request_full_edit => { root.edit_mode = true; }
+                            }
+
+                            if root.active_editor_tab == 0 && root.edit_mode : KronosRawTextEditor {
+                                width: 100%;
+                                height: 100%;
+                                code_text <=> root.input_code;
+                                line_numbers_text: root.input_line_numbers;
+                                code_edited(new_code) => { root.input_code_changed(new_code); }
+                            }
+
+                            if root.active_editor_tab == 1 && !root.edit_mode : KronosCodeSurface {
+                                width: 100%;
+                                height: 100%;
+                                lines: root.output_lines;
+                                editing_line_idx <=> root.output_editing_line;
+                                comments_hidden: root.opt_hide_comments;
+                                line_selected(line_idx) => { root.select_output_line(line_idx); }
+                                line_edited(line_idx, new_txt) => { root.edit_output_line(line_idx, new_txt); }
+                                line_newline(line_idx, curr_txt) => { root.insert_output_newline(line_idx, curr_txt); }
+                                toggle_hide_comments => {
+                                    root.opt_hide_comments = !root.opt_hide_comments;
+                                    root.run_deobfuscation();
+                                }
+                                request_full_edit => { root.edit_mode = true; }
+                            }
+
+                            if root.active_editor_tab == 1 && root.edit_mode : KronosRawTextEditor {
+                                width: 100%;
+                                height: 100%;
+                                code_text <=> root.output_code;
+                                line_numbers_text: root.output_line_numbers;
+                                code_edited(new_code) => { root.output_code_changed(new_code); }
+                            }
+                        }
+
+                        if root.split_view_enabled : HorizontalLayout {
+                            horizontal-stretch: 1;
+                            spacing: 0px;
+
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                background: #0D0D10;
+
+                                if !root.edit_mode : KronosCodeSurface {
+                                    width: 100%;
+                                    height: 100%;
+                                    lines: root.input_lines;
+                                    editing_line_idx <=> root.input_editing_line;
+                                    comments_hidden: root.opt_hide_comments;
+                                    line_selected(line_idx) => { root.select_input_line(line_idx); }
+                                    line_edited(line_idx, new_txt) => { root.edit_input_line(line_idx, new_txt); }
+                                    line_newline(line_idx, curr_txt) => { root.insert_input_newline(line_idx, curr_txt); }
+                                    toggle_hide_comments => {
+                                        root.opt_hide_comments = !root.opt_hide_comments;
+                                        root.run_deobfuscation();
+                                    }
+                                    request_full_edit => { root.edit_mode = true; }
+                                }
+
+                                if root.edit_mode : KronosRawTextEditor {
+                                    width: 100%;
+                                    height: 100%;
+                                    code_text <=> root.input_code;
+                                    line_numbers_text: root.input_line_numbers;
+                                    code_edited(new_code) => { root.input_code_changed(new_code); }
+                                }
+                            }
+
+                            Rectangle { width: 1px; background: #26262B; }
+
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                background: #0D0D10;
+
+                                if !root.edit_mode : KronosCodeSurface {
+                                    width: 100%;
+                                    height: 100%;
+                                    lines: root.output_lines;
+                                    editing_line_idx <=> root.output_editing_line;
+                                    comments_hidden: root.opt_hide_comments;
+                                    line_selected(line_idx) => { root.select_output_line(line_idx); }
+                                    line_edited(line_idx, new_txt) => { root.edit_output_line(line_idx, new_txt); }
+                                    line_newline(line_idx, curr_txt) => { root.insert_output_newline(line_idx, curr_txt); }
+                                    toggle_hide_comments => {
+                                        root.opt_hide_comments = !root.opt_hide_comments;
+                                        root.run_deobfuscation();
+                                    }
+                                    request_full_edit => { root.edit_mode = true; }
+                                }
+
+                                if root.edit_mode : KronosRawTextEditor {
+                                    width: 100%;
+                                    height: 100%;
+                                    code_text <=> root.output_code;
+                                    line_numbers_text: root.output_line_numbers;
+                                    code_edited(new_code) => { root.output_code_changed(new_code); }
+                                }
+                            }
+                        }
+                    }
+
+                    // -----------------------------------------------------------------
+                    // MODO CENTRAL 1: AST VISUAL EXPLORER INTERACTIVO
+                    // -----------------------------------------------------------------
+                    if root.center_view_mode == 1 : Rectangle {
+                        vertical-stretch: 1;
+                        background: #0D0D10;
+
+                        VerticalLayout {
+                            spacing: 0px;
+
+                            Rectangle {
+                                height: 30px;
+                                background: #101013;
+                                HorizontalLayout {
+                                    padding-left: 16px;
+                                    padding-right: 16px;
+                                    spacing: 16px;
+
+                                    Text { text: "AST STRUCTURE"; color: #E8E8EB; font-family: "Segoe UI"; font-size: 10.5px; font-weight: 700; vertical-alignment: center; }
+                                    Rectangle { horizontal-stretch: 1; }
+                                    Text { text: root.ast_nodes.length + " nodos"; color: #85858F; font-family: "Consolas"; font-size: 10px; vertical-alignment: center; }
+                                }
+                            }
+
+                            Rectangle { height: 1px; background: #26262B; }
+
+                            ScrollView {
+                                width: 100%;
+                                vertical-stretch: 1;
+
+                                VerticalLayout {
+                                    padding: 12px;
+                                    spacing: 4px;
+                                    alignment: start;
+
+                                    for node[idx] in root.ast_nodes : Rectangle {
+                                        height: 28px;
+                                        border-radius: 2px;
+                                        background: ast_row_touch.has-hover ? #151518 : #101013;
+                                        border-width: 1px;
+                                        border-color: node.is_alert ? #D9283D : #26262B;
+
+                                        HorizontalLayout {
+                                            padding-left: 12px + (node.depth * 18px);
+                                            padding-right: 12px;
+                                            spacing: 10px;
+
+                                            Rectangle {
+                                                width: 8px;
+                                                height: 8px;
+                                                y: (parent.height - self.height) / 2;
+                                                border-radius: 4px;
+                                                background: node.is_alert ? #D9283D : #85858F;
+                                            }
+
+                                            Text {
+                                                width: 130px;
+                                                text: node.node_type;
+                                                color: node.is_alert ? #F13B50 : #D9283D;
+                                                font-family: "Consolas";
+                                                font-size: 11px;
+                                                font-weight: 700;
+                                                vertical-alignment: center;
+                                            }
+
+                                            Text {
+                                                width: 220px;
+                                                text: node.name;
+                                                color: #E8E8EB;
+                                                font-family: "Consolas";
+                                                font-size: 11px;
+                                                vertical-alignment: center;
+                                                overflow: elide;
+                                            }
+
+                                            Text {
+                                                horizontal-stretch: 1;
+                                                text: node.detail;
+                                                color: #85858F;
+                                                font-family: "Consolas";
+                                                font-size: 10.5px;
+                                                vertical-alignment: center;
+                                                overflow: elide;
+                                            }
+
+                                            Text {
+                                                text: "Línea " + node.line_number;
+                                                color: #85858F;
+                                                font-family: "Consolas";
+                                                font-size: 10px;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+
+                                        ast_row_touch := TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => {
+                                                root.center_view_mode = 0;
+                                                if (node.line_number > 0) {
+                                                    root.select_input_line(node.line_number - 1);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // -----------------------------------------------------------------
+                    // MODO CENTRAL 2: VISUAL CODE DIFF (Original vs Reconstruido)
+                    // -----------------------------------------------------------------
+                    if root.center_view_mode == 2 : Rectangle {
+                        vertical-stretch: 1;
+                        background: #0D0D10;
+
+                        VerticalLayout {
+                            spacing: 0px;
+
+                            Rectangle {
+                                height: 28px;
+                                background: #101013;
+
+                                HorizontalLayout {
+                                    padding-left: 14px;
+                                    padding-right: 14px;
+
+                                    Text {
+                                        horizontal-stretch: 1;
+                                        text: "ORIGINAL / OFUSCADO (" + (root.active_filename != "" ? root.active_filename : "input.py") + ")";
+                                        color: #85858F;
+                                        font-family: "Consolas";
+                                        font-size: 10.5px;
+                                        font-weight: 600;
+                                        vertical-alignment: center;
+                                    }
+
+                                    Rectangle { width: 1px; background: #26262B; }
+
+                                    Text {
+                                        horizontal-stretch: 1;
+                                        text: "   RECONSTRUIDO / DESOFUSCADO (ast_reconstruido.py)";
+                                        color: #D9283D;
+                                        font-family: "Consolas";
+                                        font-size: 10.5px;
+                                        font-weight: 600;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+
+                            Rectangle { height: 1px; background: #26262B; }
+
+                            HorizontalLayout {
+                                vertical-stretch: 1;
+                                spacing: 0px;
+
+                                Rectangle {
+                                    horizontal-stretch: 1;
+                                    background: #0D0D10;
+                                    KronosCodeSurface {
+                                        width: 100%;
+                                        height: 100%;
+                                        lines: root.input_lines;
+                                        editing_line_idx <=> root.input_editing_line;
+                                        comments_hidden: root.opt_hide_comments;
+                                        line_selected(line_idx) => { root.select_input_line(line_idx); }
+                                        line_edited(line_idx, new_txt) => { root.edit_input_line(line_idx, new_txt); }
+                                        line_newline(line_idx, curr_txt) => { root.insert_input_newline(line_idx, curr_txt); }
+                                    }
+                                }
+
+                                Rectangle { width: 1px; background: #26262B; }
+
+                                Rectangle {
+                                    horizontal-stretch: 1;
+                                    background: #0D0D10;
+                                    KronosCodeSurface {
+                                        width: 100%;
+                                        height: 100%;
+                                        lines: root.output_lines;
+                                        editing_line_idx <=> root.output_editing_line;
+                                        comments_hidden: root.opt_hide_comments;
+                                        line_selected(line_idx) => { root.select_output_line(line_idx); }
+                                        line_edited(line_idx, new_txt) => { root.edit_output_line(line_idx, new_txt); }
+                                        line_newline(line_idx, curr_txt) => { root.insert_output_newline(line_idx, curr_txt); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // -----------------------------------------------------------------
+                    // MODO CENTRAL 3: PIPELINE STUDIO
+                    // -----------------------------------------------------------------
+                    if root.center_view_mode == 3 : Rectangle {
+                        vertical-stretch: 1;
+                        background: #0D0D10;
+
+                        ScrollView {
+                            width: 100%;
+                            height: 100%;
+
+                            VerticalLayout {
+                                padding: 20px;
+                                spacing: 14px;
+                                alignment: start;
+
+                                Text {
+                                    text: "PIPELINE LOG";
+                                    color: #E8E8EB;
+                                    font-family: "Segoe UI";
+                                    font-size: 11px;
+                                    font-weight: 700;
+                                }
+
+                                Text {
+                                    text: root.console_log;
+                                    color: #85858F;
+                                    font-family: "Consolas";
+                                    font-size: 11.5px;
+                                }
+                            }
+                        }
+                    }
+
+                    // -----------------------------------------------------------------
+                    // MODO CENTRAL 4: AUTOMATIC 7-PHASE PROJECT ANALYSIS SCREEN
+                    // -----------------------------------------------------------------
+                    if root.center_view_mode == 4 : KronosAnalysisScreen {
+                        vertical-stretch: 1;
+                        project_name: root.workspace_folder_name;
+                        project_path: root.workspace_folder_path;
+                        phases: root.analysis_phases;
+                        progress_percent: root.analysis_progress;
+                        current_op: root.analysis_current_op;
+                        live_log: root.analysis_live_log;
+                        is_running: root.analysis_is_running;
+                        is_finished: root.analysis_is_finished;
+                        verdict_case: root.analysis_verdict_case;
+                        verdict_title: root.analysis_verdict_title;
+                        verdict_summary: root.analysis_verdict_summary;
+                        enter_workspace => { root.enter_workspace(); }
+                        cancel_analysis => { root.cancel_analysis(); }
+                    }
+                }
+
+                // =================================================================
+                // PANEL INFERIOR DE RESULTADOS REDIMENSIONABLE (#101013)
+                // =================================================================
+                if root.bottom_panel_visible : Rectangle {
+                    height: 4px;
+                    background: bottom_splitter_touch.has-hover || bottom_splitter_touch.pressed ? #D9283D : #26262B;
+
+                    bottom_splitter_touch := TouchArea {
+                        mouse-cursor: ns-resize;
+                        moved => {
+                            if (self.pressed) {
+                                root.bottom_panel_height = clamp(root.bottom_panel_height - (self.mouse-y - self.pressed-y), 110px, 460px);
+                            }
+                        }
+                        pointer-event(ev) => {
+                            if (ev.kind == PointerEventKind.up) {
+                                root.save_session_state();
+                            }
+                        }
+                    }
+                }
+
+                if root.bottom_panel_visible : Rectangle {
+                    height: root.bottom_panel_height;
+                    background: #101013;
+
+                    VerticalLayout {
+                        spacing: 0px;
+
+                        Rectangle {
+                            height: 28px;
+                            background: #101013;
+
+                            HorizontalLayout {
+                                padding-left: 14px;
+                                padding-right: 10px;
+                                spacing: 18px;
+
+                                TouchArea {
+                                    width: 65px;
+                                    mouse-cursor: pointer;
+                                    clicked => { root.bottom_tab = 0; }
+                                    Text {
+                                        text: "AUDIT LOG";
+                                        color: root.bottom_tab == 0 ? #D9283D : #85858F;
+                                        font-family: "Segoe UI";
+                                        font-size: 10px;
+                                        font-weight: 700;
+                                        vertical-alignment: center;
+                                    }
+                                }
+
+                                TouchArea {
+                                    width: 115px;
+                                    mouse-cursor: pointer;
+                                    clicked => { root.bottom_tab = 1; }
+                                    Text {
+                                        text: "SECURITY (" + root.security_alerts_count + ")";
+                                        color: root.bottom_tab == 1 ? #D9283D : (root.security_is_safe ? #85858F : #F13B50);
+                                        font-family: "Segoe UI";
+                                        font-size: 10px;
+                                        font-weight: 700;
+                                        vertical-alignment: center;
+                                    }
+                                }
+
+                                TouchArea {
+                                    width: 95px;
+                                    mouse-cursor: pointer;
+                                    clicked => { root.bottom_tab = 2; }
+                                    Text {
+                                        text: "AST SYMBOLS";
+                                        color: root.bottom_tab == 2 ? #D9283D : #85858F;
+                                        font-family: "Segoe UI";
+                                        font-size: 10px;
+                                        font-weight: 700;
+                                        vertical-alignment: center;
+                                    }
+                                }
+
+                                TouchArea {
+                                    width: 70px;
+                                    mouse-cursor: pointer;
+                                    clicked => { root.bottom_tab = 3; }
+                                    Text {
+                                        text: "DIFF STREAM";
+                                        color: root.bottom_tab == 3 ? #D9283D : #85858F;
+                                        font-family: "Segoe UI";
+                                        font-size: 10px;
+                                        font-weight: 700;
+                                        vertical-alignment: center;
+                                    }
+                                }
+
+                                Rectangle { horizontal-stretch: 1; }
+
+                                KronosIconButton {
+                                    svg_commands: "M 2 2 L 10 10 M 10 2 L 2 10";
+                                    clicked => {
+                                        root.bottom_panel_visible = false;
+                                        root.save_session_state();
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle { height: 1px; background: #26262B; }
+
+                        Rectangle {
+                            vertical-stretch: 1;
+                            background: #0D0D10;
+
+                            ScrollView {
+                                width: 100%;
+                                height: 100%;
+
+                                VerticalLayout {
+                                    padding: 12px;
+                                    alignment: start;
+
+                                    Text {
+                                        text: root.bottom_tab == 0 ? root.console_log :
+                                              root.bottom_tab == 1 ? root.security_report :
+                                              root.bottom_tab == 2 ? root.tokens_preview :
+                                              root.diff_preview;
+                                        color: #E8E8EB;
+                                        font-family: "Consolas";
+                                        font-size: 11.5px;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ---------------------------------------------------------------------
+            // E. PANEL DERECHO — KRONOS AI (Contextual, Redimensionable y Ampliable)
+            // ---------------------------------------------------------------------
+            if root.ai_chat_visible : Rectangle {
+                width: 4px;
+                background: right_splitter_touch.has-hover || right_splitter_touch.pressed ? #D9283D : #26262B;
+
+                right_splitter_touch := TouchArea {
+                    mouse-cursor: ew-resize;
+                    moved => {
+                        if (self.pressed) {
+                            root.ai_panel_width = clamp(root.ai_panel_width - (self.mouse-x - self.pressed-x), 260px, 680px);
+                        }
+                    }
+                    pointer-event(ev) => {
+                        if (ev.kind == PointerEventKind.up) {
+                            root.save_session_state();
+                        }
+                    }
+                }
+            }
+
+            if root.ai_chat_visible : Rectangle {
+                width: root.ai_panel_expanded ? 580px : root.ai_panel_width;
+                background: #101013;
+
+                VerticalLayout {
+                    spacing: 0px;
+
+                    // Cabecera Superior de KRONOS AI
+                    Rectangle {
+                        height: 34px;
+                        background: #101013;
+
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 8px;
+                            spacing: 6px;
+
+                            Rectangle {
+                                width: 7px;
+                                height: 7px;
+                                y: (parent.height - self.height) / 2;
+                                border-radius: 4px;
+                                background: #D9283D;
+                            }
+
+                            Text {
+                                text: "KRONOS AI";
+                                color: #E8E8EB;
+                                font-family: "Segoe UI";
+                                font-size: 10.5px;
+                                font-weight: 700;
+                                letter-spacing: 0.8px;
+                                vertical-alignment: center;
+                            }
+
+                            // Indicador de contexto activo
+                            Rectangle {
+                                height: 18px;
+                                width: ctx_lbl.preferred-width + 10px;
+                                y: (parent.height - self.height) / 2;
+                                border-radius: 2px;
+                                background: #151518;
+                                border-width: 1px;
+                                border-color: #26262B;
+
+                                ctx_lbl := Text {
+                                    text: root.active_filename != "" ? root.active_filename : "Global Context";
+                                    color: #85858F;
+                                    font-family: "Consolas";
+                                    font-size: 9.5px;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            Rectangle { horizontal-stretch: 1; }
+
+                            HorizontalLayout {
+                                spacing: 2px;
+
+                                // Ampliar / Contraer vista del panel IA
+                                KronosIconButton {
+                                    active: root.ai_panel_expanded;
+                                    svg_commands: "M 2 4 L 2 2 L 4 2 M 8 2 L 10 2 L 10 4 M 10 8 L 10 10 L 8 10 M 4 10 L 2 10 L 2 8";
+                                    clicked => { root.ai_panel_expanded = !root.ai_panel_expanded; }
+                                }
+
+                                // Nueva conversación (+)
+                                KronosIconButton {
+                                    svg_commands: "M 6 2 L 6 10 M 2 6 L 10 6";
+                                    clicked => { root.clear_chat_history(); }
+                                }
+
+                                // Configurar API Key (...)
+                                KronosIconButton {
+                                    active: root.ai_key_open;
+                                    svg_commands: "M 2 6 A 0.8 0.8 0 1 0 2 7.5 A 0.8 0.8 0 1 0 2 6 M 6 6 A 0.8 0.8 0 1 0 6 7.5 A 0.8 0.8 0 1 0 6 6 M 10 6 A 0.8 0.8 0 1 0 10 7.5 A 0.8 0.8 0 1 0 10 6";
+                                    clicked => { root.ai_key_open = !root.ai_key_open; }
+                                }
+
+                                // Cerrar panel KRONOS AI (x)
+                                KronosIconButton {
+                                    svg_commands: "M 2.5 2.5 L 9.5 9.5 M 9.5 2.5 L 2.5 9.5";
+                                    clicked => {
+                                        root.ai_chat_visible = false;
+                                        root.save_session_state();
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle { height: 1px; background: #26262B; }
+
+                    // Cajón plegable de API Key
+                    if root.ai_key_open : Rectangle {
+                        height: 36px;
+                        background: #151518;
+
+                        HorizontalLayout {
+                            padding-left: 10px;
+                            padding-right: 10px;
+                            padding-top: 5px;
+                            padding-bottom: 5px;
+                            spacing: 6px;
+
+                            Text {
+                                text: "API KEY:";
+                                color: #85858F;
+                                font-family: "Consolas";
+                                font-size: 10px;
+                                vertical-alignment: center;
+                            }
+
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                border-radius: 2px;
+                                background: #0D0D10;
+                                border-width: 1px;
+                                border-color: api_key_input.has-focus ? #D9283D : #26262B;
+
+                                HorizontalLayout {
+                                    padding-left: 8px;
+                                    padding-right: 8px;
+
+                                    api_key_input := TextInput {
+                                        width: 100%;
+                                        height: 100%;
+                                        text <=> root.gemini_api_key;
+                                        color: #E8E8EB;
+                                        font-family: "Consolas";
+                                        font-size: 10.5px;
+                                        vertical-alignment: center;
+                                        single-line: true;
+                                        selection-background-color: #D9283D;
+                                        selection-foreground-color: #E8E8EB;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Historial de Conversaciones de KRONOS AI
+                    Rectangle {
+                        vertical-stretch: 1;
+                        background: #101013;
+
+                        if root.chat_messages.length > 0 : ScrollView {
+                            width: 100%;
+                            height: 100%;
+
+                            VerticalLayout {
+                                padding: 10px;
+                                spacing: 10px;
+                                alignment: start;
+
+                                for msg[m_idx] in root.chat_messages : Rectangle {
+                                    border-radius: 2px;
+                                    background: msg.role == 1 ? #151518 : #0D0D10;
+                                    border-width: 1px;
+                                    border-color: msg.role == 1 ? #D9283D : #26262B;
+
+                                    VerticalLayout {
+                                        padding: 10px;
+                                        spacing: 6px;
+
+                                        HorizontalLayout {
+                                            spacing: 6px;
+
+                                            Rectangle {
+                                                width: 5px;
+                                                height: 5px;
+                                                y: (parent.height - self.height) / 2;
+                                                border-radius: 2.5px;
+                                                background: msg.role == 1 ? #E8E8EB : #D9283D;
+                                            }
+
+                                            Text {
+                                                text: msg.role == 1 ? "OPERADOR" : "KRONOS AI";
+                                                color: msg.role == 1 ? #E8E8EB : #D9283D;
+                                                font-family: "Segoe UI";
+                                                font-size: 10px;
+                                                font-weight: 700;
+                                                letter-spacing: 0.5px;
+                                                vertical-alignment: center;
+                                            }
+
+                                            Rectangle { horizontal-stretch: 1; }
+
+                                            Text {
+                                                text: msg.timestamp;
+                                                color: #85858F;
+                                                font-family: "Consolas";
+                                                font-size: 9.5px;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+
+                                        if msg.text != "" : Text {
+                                            text: msg.text;
+                                            color: #E8E8EB;
+                                            font-family: (msg.role == 1) ? "Segoe UI" : "Segoe UI";
+                                            font-size: 11px;
+                                            wrap: word-wrap;
+                                        }
+
+                                        // Bloque de código integrado con cabecera y acciones rápidas
+                                        if msg.has_code : Rectangle {
+                                            border-radius: 2px;
+                                            background: #08080A;
+                                            border-width: 1px;
+                                            border-color: #26262B;
+
+                                            VerticalLayout {
+                                                padding: 6px;
+                                                spacing: 6px;
+
+                                                HorizontalLayout {
+                                                    spacing: 6px;
+                                                    alignment: start;
+
+                                                    Rectangle {
+                                                        height: 18px;
+                                                        border-radius: 2px;
+                                                        background: #D9283D24;
+                                                        border-width: 1px;
+                                                        border-color: #D9283D;
+
+                                                        HorizontalLayout {
+                                                            padding-left: 6px;
+                                                            padding-right: 6px;
+
+                                                            Text {
+                                                                text: msg.code_lang != "" ? msg.code_lang : "CÓDIGO";
+                                                                color: #F13B50;
+                                                                font-family: "Segoe UI";
+                                                                font-size: 9px;
+                                                                font-weight: 700;
+                                                                letter-spacing: 0.5px;
+                                                                vertical-alignment: center;
+                                                            }
+                                                        }
+                                                    }
+
+                                                    Rectangle { horizontal-stretch: 1; }
+
+                                                    KronosActionPill {
+                                                        label: "Copiar";
+                                                        primary: false;
+                                                        clicked => { root.copy_chat_code(msg.code_snippet); }
+                                                    }
+
+                                                    KronosActionPill {
+                                                        label: "Volcar al editor";
+                                                        primary: true;
+                                                        clicked => {
+                                                            root.last_ai_code_suggestion = msg.code_snippet;
+                                                            root.apply_ai_code_to_editor();
+                                                        }
+                                                    }
+                                                }
+
+                                                Rectangle { height: 1px; background: #1C1C22; }
+
+                                                Text {
+                                                    text: msg.code_snippet;
+                                                    color: #E8E8EB;
+                                                    font-family: "Consolas";
+                                                    font-size: 10px;
+                                                    wrap: word-wrap;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle { height: 1px; background: #26262B; }
+
+                    // Zona Inferior de Entrada, Selector de Modelo y Selector de Modo de Trabajo
+                    VerticalLayout {
+                        padding-left: 10px;
+                        padding-right: 10px;
+                        padding-top: 8px;
+                        padding-bottom: 6px;
+                        spacing: 6px;
+
+                        // Menú desplegable de selección de modelo Gemini
+                        if root.model_dropdown_open : Rectangle {
+                            border-radius: 2px;
+                            background: #151518;
+                            border-width: 1px;
+                            border-color: #26262B;
+
+                            VerticalLayout {
+                                padding-top: 4px;
+                                padding-bottom: 4px;
+                                spacing: 1px;
+
+                                ModelOptionItem {
+                                    model_name: "gemini-3.1-flash-lite";
+                                    is_selected: root.selected_model == "gemini-3.1-flash-lite";
+                                    description: "Baja latencia";
+                                    selected => {
+                                        root.selected_model = "gemini-3.1-flash-lite";
+                                        root.model_dropdown_open = false;
+                                        root.select_model("gemini-3.1-flash-lite");
+                                    }
+                                }
+                                ModelOptionItem {
+                                    model_name: "gemini-3.8-flash";
+                                    is_selected: root.selected_model == "gemini-3.8-flash";
+                                    description: "Análisis profundo";
+                                    selected => {
+                                        root.selected_model = "gemini-3.8-flash";
+                                        root.model_dropdown_open = false;
+                                        root.select_model("gemini-3.8-flash");
+                                    }
+                                }
+                                ModelOptionItem {
+                                    model_name: "gemini-3.5-flash";
+                                    is_selected: root.selected_model == "gemini-3.5-flash";
+                                    description: "Equilibrado";
+                                    selected => {
+                                        root.selected_model = "gemini-3.5-flash";
+                                        root.model_dropdown_open = false;
+                                        root.select_model("gemini-3.5-flash");
+                                    }
+                                }
+                            }
+                        }
+
+                        // Menú desplegable de modo de trabajo
+                        if root.mode_dropdown_open : Rectangle {
+                            border-radius: 2px;
+                            background: #151518;
+                            border-width: 1px;
+                            border-color: #26262B;
+
+                            VerticalLayout {
+                                padding-top: 4px;
+                                padding-bottom: 4px;
+                                spacing: 1px;
+
+                                ModelOptionItem {
+                                    model_name: "Deobfuscate";
+                                    is_selected: root.selected_ai_mode == "Deobfuscate";
+                                    description: "Reconstrucción limpia";
+                                    selected => {
+                                        root.selected_ai_mode = "Deobfuscate";
+                                        root.mode_dropdown_open = false;
+                                        root.select_ai_mode("Deobfuscate");
+                                    }
+                                }
+                                ModelOptionItem {
+                                    model_name: "Explain";
+                                    is_selected: root.selected_ai_mode == "Explain";
+                                    description: "Explicación técnica";
+                                    selected => {
+                                        root.selected_ai_mode = "Explain";
+                                        root.mode_dropdown_open = false;
+                                        root.select_ai_mode("Explain");
+                                    }
+                                }
+                                ModelOptionItem {
+                                    model_name: "Security Audit";
+                                    is_selected: root.selected_ai_mode == "Security Audit";
+                                    description: "Auditoría de sinks";
+                                    selected => {
+                                        root.selected_ai_mode = "Security Audit";
+                                        root.mode_dropdown_open = false;
+                                        root.select_ai_mode("Security Audit");
+                                    }
+                                }
+                            }
+                        }
+
+                        // Caja de Entrada de KRONOS AI
+                        Rectangle {
+                            height: 68px;
+                            border-radius: 2px;
+                            background: #0D0D10;
+                            border-width: 1px;
+                            border-color: chat_prompt_input.has-focus ? #D9283D : #26262B;
+
+                            VerticalLayout {
+                                padding-left: 8px;
+                                padding-right: 8px;
+                                padding-top: 6px;
+                                padding-bottom: 6px;
+                                spacing: 6px;
+
+                                Rectangle {
+                                    height: 24px;
+                                    background: transparent;
+
+                                    if root.chat_input_text == "" && !chat_prompt_input.has-focus : Text {
+                                        width: 100%;
+                                        height: 100%;
+                                        text: "Consulta sobre el código, AST o pide reconstrucción...";
+                                        color: #85858F;
+                                        font-family: "Segoe UI";
+                                        font-size: 11px;
+                                        vertical-alignment: center;
+                                    }
+
+                                    chat_prompt_input := TextInput {
+                                        width: 100%;
+                                        height: 100%;
+                                        text <=> root.chat_input_text;
+                                        color: #E8E8EB;
+                                        font-family: "Segoe UI";
+                                        font-size: 11px;
+                                        vertical-alignment: center;
+                                        single-line: true;
+                                        selection-background-color: #D9283D;
+                                        selection-foreground-color: #E8E8EB;
+                                        accepted => {
+                                            if (root.chat_input_text != "") {
+                                                root.send_chat_prompt(root.chat_input_text);
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Controles inferiores: Selector de Modo + Selector de Modelo + Enviar
+                                HorizontalLayout {
+                                    spacing: 6px;
+
+                                    // Selector de Modo de Trabajo
+                                    Rectangle {
+                                        height: 20px;
+                                        border-radius: 2px;
+                                        background: mode_sel_touch.has-hover ? #151518 : #101013;
+                                        border-width: 1px;
+                                        border-color: root.mode_dropdown_open ? #D9283D : #26262B;
+
+                                        HorizontalLayout {
+                                            padding-left: 6px;
+                                            padding-right: 6px;
+                                            spacing: 4px;
+
+                                            Text {
+                                                text: root.selected_ai_mode;
+                                                color: #D9283D;
+                                                font-family: "Segoe UI";
+                                                font-size: 10px;
+                                                font-weight: 600;
+                                                vertical-alignment: center;
+                                            }
+
+                                            Path {
+                                                width: 6px;
+                                                height: 4px;
+                                                y: (parent.height - self.height) / 2;
+                                                commands: "M 0.5 0.5 L 3 3 L 5.5 0.5";
+                                                stroke: #85858F;
+                                                stroke-width: 1px;
+                                                fill: transparent;
+                                            }
+                                        }
+
+                                        mode_sel_touch := TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => {
+                                                root.mode_dropdown_open = !root.mode_dropdown_open;
+                                                root.model_dropdown_open = false;
+                                            }
+                                        }
+                                    }
+
+                                    // Selector de Modelo Gemini
+                                    Rectangle {
+                                        height: 20px;
+                                        border-radius: 2px;
+                                        background: model_sel_touch.has-hover ? #151518 : #101013;
+                                        border-width: 1px;
+                                        border-color: root.model_dropdown_open ? #D9283D : #26262B;
+
+                                        HorizontalLayout {
+                                            padding-left: 6px;
+                                            padding-right: 6px;
+                                            spacing: 4px;
+
+                                            Text {
+                                                text: root.selected_model;
+                                                color: #E8E8EB;
+                                                font-family: "Consolas";
+                                                font-size: 10px;
+                                                vertical-alignment: center;
+                                            }
+
+                                            Path {
+                                                width: 6px;
+                                                height: 4px;
+                                                y: (parent.height - self.height) / 2;
+                                                commands: "M 0.5 0.5 L 3 3 L 5.5 0.5";
+                                                stroke: #85858F;
+                                                stroke-width: 1px;
+                                                fill: transparent;
+                                            }
+                                        }
+
+                                        model_sel_touch := TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => {
+                                                root.model_dropdown_open = !root.model_dropdown_open;
+                                                root.mode_dropdown_open = false;
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle { horizontal-stretch: 1; }
+
+                                    // Botón Enviar Consulta
+                                    Rectangle {
+                                        width: 24px;
+                                        height: 20px;
+                                        border-radius: 2px;
+                                        background: send_touch.has-hover ? #F13B50 : #D9283D;
+
+                                        Path {
+                                            width: 9px;
+                                            height: 9px;
+                                            x: 7.5px;
+                                            y: 5.5px;
+                                            commands: "M 4.5 8.5 L 4.5 1.5 M 1.5 4.5 L 4.5 1.5 L 7.5 4.5";
+                                            stroke: #E8E8EB;
+                                            stroke-width: 1.3px;
+                                            fill: transparent;
+                                        }
+
+                                        send_touch := TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => {
+                                                if (root.chat_input_text != "") {
+                                                    root.send_chat_prompt(root.chat_input_text);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Estado de conexión / inferencia
+                        if root.ai_busy || root.ai_status_badge != "" : HorizontalLayout {
+                            height: 16px;
+                            spacing: 8px;
+
+                            Rectangle {
+                                width: 6px;
+                                height: 6px;
+                                y: (parent.height - self.height) / 2;
+                                border-radius: 3px;
+                                background: root.ai_busy ? #D9283D : #85858F;
+                            }
+
+                            Text {
+                                text: root.ai_busy ? "Procesando con Gemini..." : root.ai_status_badge;
+                                color: root.ai_busy ? #D9283D : #85858F;
+                                font-family: "Consolas";
+                                font-size: 9.5px;
+                                vertical-alignment: center;
+                            }
+
+                            Rectangle { horizontal-stretch: 1; }
+                        }
+                    }
+                }
+            }
+        }
+
+        // =========================================================================
+        // F. BARRA INFERIOR DE ESTADO SOBERANA (22px, #0B0B0D)
+        // =========================================================================
+        Rectangle { height: 1px; background: #26262B; }
+
+        Rectangle {
+            height: 22px;
+            background: #0B0B0D;
+
+            HorizontalLayout {
+                padding-left: 10px;
+                padding-right: 10px;
+                spacing: 12px;
+
+                Rectangle {
+                    width: 6px;
+                    height: 6px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 3px;
+                    background: #D9283D;
+                }
+
+                Text {
+                    text: "KRONOS DESCODE";
+                    color: #E8E8EB;
+                    font-family: "Segoe UI";
+                    font-size: 10px;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                }
+
+                Rectangle { width: 1px; height: 12px; y: 5px; background: #26262B; }
+
+                TouchArea {
+                    width: 90px;
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.bottom_panel_visible = !root.bottom_panel_visible;
+                        root.bottom_tab = 1;
+                    }
+
+                    Text {
+                        text: root.security_is_safe ? "Seguro" : ("Alertas: " + root.security_alerts_count);
+                        color: root.security_is_safe ? #85858F : #D9283D;
+                        font-family: "Segoe UI";
+                        font-size: 10px;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle { width: 1px; height: 12px; y: 5px; background: #26262B; }
+
+                Text {
+                    text: root.status_text;
+                    color: #85858F;
+                    font-family: "Segoe UI";
+                    font-size: 10.5px;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+
+                Rectangle { horizontal-stretch: 1; }
+
+                if root.has_open_file : Text {
+                    text: "AST Nodes: " + root.ast_nodes.length;
+                    color: #85858F;
+                    font-family: "Consolas";
+                    font-size: 10px;
+                    vertical-alignment: center;
+                }
+
+                if root.has_open_file : Text {
+                    text: "UTF-8  |  Python AST";
+                    color: #85858F;
+                    font-family: "Consolas";
+                    font-size: 10px;
+                    vertical-alignment: center;
+                }
+
+                TouchArea {
+                    width: 75px;
+                    mouse-cursor: pointer;
+                    clicked => { root.ai_chat_visible = !root.ai_chat_visible; }
+                    Text {
+                        text: "KRONOS AI";
+                        color: root.ai_chat_visible ? #D9283D : #85858F;
+                        font-family: "Consolas";
+                        font-size: 10px;
+                        font-weight: 600;
+                        horizontal-alignment: right;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+}
+
+    // =========================================================================
+    // COMMAND PALETTE FLOTANTE (Ctrl+P / Command Launcher)
+    // =========================================================================
+    if root.command_palette_open : Rectangle {
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: 100%;
+        background: #0B0B0DCC;
+
+        TouchArea {
+            width: 100%;
+            height: 100%;
+            clicked => { root.command_palette_open = false; }
+        }
+
+        Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: 44px;
+            width: 560px;
+            background: #101013;
+            border-radius: 3px;
+            border-width: 1px;
+            border-color: #D9283D;
+
+            VerticalLayout {
+                padding: 10px;
+                spacing: 6px;
+
+                // Campo de búsqueda dentro de la Command Palette
+                Rectangle {
+                    height: 28px;
+                    border-radius: 2px;
+                    background: #0D0D10;
+                    border-width: 1px;
+                    border-color: cmd_input.has-focus ? #D9283D : #26262B;
+
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        padding-right: 8px;
+                        spacing: 8px;
+
+                        Path {
+                            width: 10px;
+                            height: 10px;
+                            y: (parent.height - self.height) / 2;
+                            commands: "M 4.5 1 A 3.5 3.5 0 1 0 4.5 8 A 3.5 3.5 0 1 0 4.5 1 M 7.2 7.2 L 9.5 9.5";
+                            stroke: cmd_input.has-focus ? #D9283D : #85858F;
+                            stroke-width: 1.1px;
+                            fill: transparent;
+                        }
+
+                        cmd_input := TextInput {
+                            width: 100%;
+                            height: 100%;
+                            text <=> root.command_palette_query;
+                            color: #E8E8EB;
+                            font-family: "Segoe UI";
+                            font-size: 11px;
+                            vertical-alignment: center;
+                            single-line: true;
+                            selection-background-color: #D9283D;
+                            selection-foreground-color: #E8E8EB;
+                            edited => { root.command_palette_query_changed(self.text); }
+                            accepted => {
+                                if (root.palette_commands.length > 0) {
+                                    root.command_palette_open = false;
+                                    root.execute_palette_command(root.palette_commands[0].id);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle { height: 1px; background: #26262B; }
+
+                // Listado de comandos filtrados en tiempo real
+                ScrollView {
+                    width: 100%;
+                    max-height: 420px;
+
+                    VerticalLayout {
+                        spacing: 1px;
+
+                        for cmd in root.palette_commands : FileMenuRow {
+                            label: cmd.label;
+                            shortcut: cmd.shortcut;
+                            clicked => {
+                                root.command_palette_open = false;
+                                root.execute_palette_command(cmd.id);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

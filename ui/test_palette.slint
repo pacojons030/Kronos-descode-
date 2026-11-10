@@ -1,0 +1,15 @@
+import { TextEdit, Palette } from "std-widgets.slint";
+
+export component MainWindow inherits Window {
+    title: "Test";
+    width: 400px;
+    height: 300px;
+
+    init => {
+        Palette.color-scheme = ColorScheme.dark;
+    }
+
+    TextEdit {
+        text: "Testing dark palette";
+    }
+}
